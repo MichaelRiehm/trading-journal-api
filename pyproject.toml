@@ -1,0 +1,75 @@
+[project]
+name = "trading-journal-api"
+version = "0.1.0"
+description = "REST API for planning, logging and journaling swing trades, with analytics and weekly reviews."
+readme = "README.md"
+authors = [{ name = "Michael Riehm", email = "riehm7070@gmail.com" }]
+requires-python = ">=3.15"
+dependencies = [
+    "alembic>=1.20.0",
+    "fastapi>=0.143.0",
+    "psycopg[binary]>=3.3.6",
+    "pwdlib[argon2]>=0.3.1",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.15.1",
+    "sqlalchemy>=2.1,<2.2",
+    "uvicorn>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Distribution is "trading-journal-api"; the import package is "trading_journal".
+module-name = "trading_journal"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "B",     # flake8-bugbear
+    "UP",    # pyupgrade
+    "SIM",   # flake8-simplify
+    "N",     # pep8-naming
+    "C4",    # flake8-comprehensions
+    "RUF",   # ruff-specific
+    "FAST",  # FastAPI
+    "ASYNC", # flake8-async
+    "S",     # flake8-bandit (security)
+    "PT",    # flake8-pytest-style
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"] # assert is how pytest tests work
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]

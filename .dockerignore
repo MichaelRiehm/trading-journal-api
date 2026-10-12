@@ -1,0 +1,19 @@
+# Keep the build context small and never ship the Windows .venv or secrets into the image.
+.git
+.github
+.venv
+.env
+.env.*
+.claude
+**/__pycache__
+.mypy_cache
+.ruff_cache
+.pytest_cache
+tests
+docs
+compose.yaml
+Dockerfile
+Makefile
+.pre-commit-config.yaml
+CLAUDE.md
+PROJECT_BRIEF.md

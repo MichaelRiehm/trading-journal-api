@@ -1,0 +1,3 @@
+# Normalize to LF in the repo and the working tree, so files are byte-identical on
+# Windows (local dev) and Linux (CI, Docker). The Makefile and shell scripts break with CRLF.
+* text=auto eol=lf
