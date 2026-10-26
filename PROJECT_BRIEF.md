@@ -110,12 +110,14 @@ Layered: router -> service -> repository.
 - Branch names: `<issue number>-short-name`, for example `7-trade-lifecycle`.
 - Small commits, conventional commit messages.
 - Start each stage in plan mode. Wait for approval before writing code.
-- After each stage, explain what was built and the main Python or framework concepts used, in plain language, for someone strong in C#/.NET and new to production Python. Compare to the .NET equivalent where it helps.
+- After each stage, explain what was built and the main Python or framework concepts used, in plain language, for someone strong in C#/.NET and new to production Python. Compare to the .NET equivalent where it helps. Keep it brief; the depth goes into `docs/interview-prep.md`.
+- Progress comes first; learning happens afterwards. Keep Michael's touchpoints to one plan approval per stage and one PR merge. Claude makes the decisions and recommends them, rather than asking open questions.
 
 ## Docs the project keeps
 
-- `docs/decisions/NNNN-title.md`: one ADR per real choice. Sections: Context, Decision, Alternatives considered (and why rejected), Consequences. Claude drafts; Michael rewrites in his own words before merge.
-- `docs/learning-log.md`: dated entries. What I built, what I learned, what surprised me, bugs I hit and how I fixed them, and one interview talking point. Claude appends a stub at the end of each stage; Michael fills it in.
+- `docs/decisions/NNNN-title.md`: one ADR per real choice. Sections: Context, Decision, Alternatives considered (and why rejected), Consequences. Claude writes them in full; Michael reviews them later. ADRs are append-only: a reversed decision gets a new ADR that supersedes the old one.
+- `docs/learning-log.md`: dated entries. What I built, what I learned, what surprised me, bugs I hit and how I fixed them, and one interview talking point. Claude writes the entry at the end of each stage, marked as not yet reviewed by Michael.
+- `docs/interview-prep.md`: the study list. Key decisions, concepts and likely interview questions, each with a short answer, a link, and a "reviewed" checkbox. Claude adds to it every stage; Michael works through it before interviews.
 - `README.md`: what it is, architecture, how to run, how to test, links to the ADRs.
 
 ## Phase 1 stages
