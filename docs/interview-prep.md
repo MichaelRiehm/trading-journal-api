@@ -126,3 +126,88 @@ What to be able to explain about this project, collected stage by stage while it
 ### Bug stories ("tell me about a bug you hit")
 
 - [ ] **The first CI run failed before any code ran.** The workflow used `astral-sh/setup-uv@v10`, but setup-uv only publishes full tags like `v10.3.0`. Fixed through issue #7 → PR #8 by pinning to SHAs, which turned a typo-class bug into a security improvement. **Lesson:** verify that a ref exists, not just that a release exists.
+
+---
+
+## Stage 1: Data layer
+
+### SQLAlchemy and Alembic (vs EF Core)
+
+- [ ] **How does SQLAlchemy map to EF Core?**
+
+  | SQLAlchemy | EF Core |
+  |---|---|
+  | `Session` | `DbContext`, with change tracking |
+  | `select(Trade).where(...)` | LINQ |
+  | `Mapped[...]` classes | entities |
+  | Alembic | EF migrations |
+  | `alembic revision --autogenerate` | `dotnet ef migrations add` |
+  | `alembic upgrade head` | `dotnet ef database update` |
+
+  → [models/](../src/trading_journal/models/)
+- [ ] **What's the difference between `flush()` and `commit()`?**
+  - Flush sends pending SQL inside the current transaction: you get generated values and constraint errors now, but nothing is permanent.
+  - Commit ends the transaction.
+  - Our repositories flush, and services decide when to commit (unit of work).
+- [ ] **What does `Mapped[Decimal | None]` mean?**
+  The Python type (checked by mypy) and the nullability (`None` → `NULL` allowed). The column type comes from the type map (`Decimal` → `NUMERIC(20,8)`), so most columns need no extra arguments.
+- [ ] **Why autogenerate a migration and then review it?**
+  Autogenerate diffs the models against the database, which is a big time-saver, but it misses things like CHECK constraint changes and renames (it sees a rename as a drop plus an add). Always read the generated file.
+- [ ] **How do you know the models and migrations match?**
+  A test runs Alembic's `compare_metadata` against the freshly migrated test database. A non-empty diff means someone changed a model without a migration. Another test runs upgrade → downgrade → upgrade.
+
+  → [test_migrations.py](../tests/test_migrations.py)
+- [ ] **How do migrations run in deployment?**
+  As a separate one-shot step before the app starts. In compose, the `migrate` service runs, and `api` waits for it with `service_completed_successfully`. In Kubernetes, that becomes a Job or an init container. Why not run migrations on app startup? Several replicas would race, and a failed migration should block the deploy, not crash-loop the app.
+
+### Schema design
+
+- [ ] **Why UUIDv7 instead of auto-increment ids?**
+  - Sequential ids leak counts ("I'm trade #12") and invite enumeration (try /trades/13).
+  - Random UUIDv4s fix that but scatter inserts across the index.
+  - v7 is time-ordered and unguessable.
+  - `uuid.uuid7()` is in the stdlib since Python 3.14.
+
+  → [ADR 0004](decisions/0004-schema-conventions.md)
+- [ ] **Why `NUMERIC(20, 8)` and `Decimal`, never float?**
+  Floats are binary fractions: `0.1 + 0.2 != 0.3`. Money must be exact. 20/8 gives 12 integer digits and 8 decimals, enough for sub-cent crypto prices and fractional quantities.
+- [ ] **Why VARCHAR plus CHECK instead of native Postgres ENUMs?**
+  Adding a native enum value needs `ALTER TYPE` (with transaction caveats), and removing one is painful. With VARCHAR plus CHECK, a change is an ordinary migration. `source` will grow in later phases.
+- [ ] **Why put business rules in the database if the service validates anyway?**
+  Defence in depth. The service gives good error messages, and the database guarantees correctness against bugs, scripts and manual fixes. For example, `ck_trades_status_fields` makes "a closed trade without an exit price" impossible to store.
+- [ ] **What is the composite foreign key on trades for?**
+  `(strategy_id, user_id) → strategies(id, user_id)`. A trade's strategy must belong to the *same user*, enforced by Postgres, not just by code. It needs a unique constraint on `strategies(id, user_id)` as its target.
+- [ ] **How is ownership enforced in the repositories?**
+  Every lookup takes `user_id` (`get(user_id, trade_id)`). Another user's row simply isn't found, and the service returns 404. There's no "load it, then check the owner" step to forget.
+- [ ] **Why a constraint naming convention?**
+  Deterministic names (`ck_trades_stop_on_losing_side`) make migrations reproducible and error messages readable. Without one, Postgres invents names that differ between databases.
+
+### Sync vs async, and testing
+
+- [ ] **Why synchronous SQLAlchemy in an async framework?**
+  - FastAPI runs plain `def` endpoints on a thread pool, so blocking DB calls never stall the event loop.
+  - Async pays off with many concurrent slow I/O waits, which isn't this workload, and adds pitfalls (lazy loading errors, blocking-in-async bugs).
+  - Rule: `def` for DB endpoints, and `async def` only if everything inside is non-blocking.
+
+  → [ADR 0002](decisions/0002-sync-database-access.md)
+- [ ] **How do your integration tests stay isolated and fast?**
+  - One test database per session, created and migrated by Alembic.
+  - Each test runs in a transaction that is rolled back.
+  - `join_transaction_mode="create_savepoint"` lets code under test call `commit()` safely.
+  - 28 tests take about 3 seconds.
+
+  → [ADR 0003](decisions/0003-test-database-strategy.md), [conftest.py](../tests/conftest.py)
+- [ ] **Why not SQLite for tests?**
+  It lacks the Postgres behaviour we depend on (NUMERIC, CHECK semantics, `timestamptz`). Tests would pass against a different database than production.
+- [ ] **What's the difference between liveness (`/health`) and readiness (`/ready`)?**
+  - Liveness says the process is alive; if it fails, restart the process.
+  - Readiness says the app can serve traffic, here meaning the database is reachable; if it fails, stop sending traffic, but don't restart.
+  - These map directly onto Kubernetes probes in Phase 2.
+
+### Bug stories
+
+- [ ] **`alembic check` hung forever.** A stack dump with `faulthandler.dump_traceback_later` showed it stuck in psycopg's connect.
+  - `localhost` resolved to IPv6 `::1` first, and Docker Desktop only publishes on `127.0.0.1`, so the connection got no answer instead of a fast refusal.
+  - Fixed with `127.0.0.1` and a `connect_timeout` everywhere.
+  - **Lessons:** always set network timeouts, and dump a stack when something hangs rather than guessing.
+- [ ] **The migrate container said "No 'script_location' key".** `COPY` before `WORKDIR` in the Dockerfile put `alembic.ini` in `/`. **Lesson:** in a Dockerfile, relative paths follow the `WORKDIR` in effect at that line.

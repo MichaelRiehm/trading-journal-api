@@ -2,7 +2,7 @@
 
 A REST API where a swing trader plans trades before entering, logs the result, journals thoughts before, during and after each trade, and gets analytics plus a weekly review of habits.
 
-**Status:** Stage 0 (scaffold). Only `GET /health` exists so far. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
+**Status:** Stage 1 (data layer). The schema, migrations and repositories are in place; the only endpoints so far are `GET /health` and `GET /ready`. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
 
 ## Stack
 
@@ -25,7 +25,9 @@ Interactive API docs: http://localhost:8000/docs
 ## Development
 
 ```sh
-make test        # pytest
+make db          # start only Postgres (the tests need it)
+make migrate     # apply migrations to DATABASE_URL
+make test        # pytest (integration tests use a throwaway journal_test database)
 make lint        # ruff check + format check
 make format      # apply formatting and safe fixes
 make typecheck   # mypy --strict
@@ -40,5 +42,8 @@ Layered: router → service → repository. Details in [CLAUDE.md](CLAUDE.md) an
 ## Decisions
 
 - [0001: Tooling (uv, ruff, mypy, src layout)](docs/decisions/0001-tooling.md)
+- [0002: Synchronous database access](docs/decisions/0002-sync-database-access.md)
+- [0003: Test database strategy](docs/decisions/0003-test-database-strategy.md)
+- [0004: Schema conventions](docs/decisions/0004-schema-conventions.md)
 
 Learning log: [docs/learning-log.md](docs/learning-log.md) · Interview prep: [docs/interview-prep.md](docs/interview-prep.md)
