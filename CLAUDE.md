@@ -28,8 +28,12 @@ Layered: **router → service → repository**.
 - Small commits, conventional commit messages (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`).
 - Start each stage in plan mode and wait for approval before writing code.
 - No new dependency without a reason stated in the PR.
-- One ADR per real choice in `docs/decisions/NNNN-title.md` (Context, Decision, Alternatives considered, Consequences). Claude drafts; Michael rewrites.
-- After each stage: explain what was built and the main Python concepts for a C#/.NET developer, and append a stub to `docs/learning-log.md`.
+- **Progress first, learning later.** Michael's touchpoints per stage: approve the plan, merge the PR. Make decisions and recommend them; don't ask open questions.
+- One ADR per real choice in `docs/decisions/NNNN-title.md` (Context, Decision, Alternatives considered, Consequences). Claude writes them in full. They are append-only: supersede a decision, don't rewrite it.
+- End of each stage:
+  - write the stage's entry in `docs/learning-log.md` (marked as not yet reviewed by Michael)
+  - add its decisions, concepts and likely interview questions to `docs/interview-prep.md`
+  - give a brief explanation of the main Python concepts for a C#/.NET developer
 
 ## Commands
 
