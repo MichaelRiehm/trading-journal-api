@@ -38,6 +38,10 @@ COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 WORKDIR /app
+# Migrations ship in the image, so the same image can run `alembic upgrade head`
+# (the compose `migrate` service now; a Kubernetes Job in Phase 2).
+COPY alembic.ini ./
+COPY migrations ./migrations
 USER app
 EXPOSE 8000
 CMD ["uvicorn", "trading_journal.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -17,6 +17,24 @@ jobs:
     # Branch protection on main requires this check by its name: "ci".
     name: ci
     runs-on: ubuntu-24.04
+    # A real Postgres for the integration tests. They create, migrate and drop their
+    # own journal_test database on this server.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: journal
+          POSTGRES_PASSWORD: journal-ci-password
+          POSTGRES_DB: journal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U journal -d journal"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://journal:journal-ci-password@127.0.0.1:5432/journal
     # Actions are pinned to full commit SHAs: a tag can be moved to different code, a SHA cannot.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
