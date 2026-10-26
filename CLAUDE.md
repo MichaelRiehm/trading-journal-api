@@ -41,7 +41,10 @@ Layered: **router → service → repository**.
 uv sync                  # create .venv and install exactly what uv.lock pins
 make up                  # build + start Postgres and the API (needs .env; copy .env.example)
 make down                # stop containers, keep the database volume
-make test                # uv run pytest
+make db                  # start only Postgres
+make migrate             # alembic upgrade head
+make test                # uv run pytest (needs `make db`; uses a throwaway journal_test database)
+uv run alembic revision --autogenerate -m "..."   # new migration: always review the file
 make lint                # ruff check + ruff format --check
 make format              # ruff format + ruff check --fix
 make typecheck           # uv run mypy (strict)

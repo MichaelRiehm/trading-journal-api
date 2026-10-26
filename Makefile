@@ -1,15 +1,21 @@
 # Recipes stay one plain command per line so they run the same under sh (CI, Linux)
 # and cmd.exe (GNU make on Windows).
 
-.PHONY: up down test lint format typecheck
+.PHONY: up down db migrate test lint format typecheck
 
-up: ## Build the API image, start Postgres and the API, wait until both are healthy
+up: ## Build the image, start Postgres, run migrations, start the API; wait until healthy
 	docker compose up --build --detach --wait
 
 down: ## Stop the containers (the database volume is kept)
 	docker compose down
 
-test: ## Run the test suite
+db: ## Start only Postgres (enough for tests and for running the API on the host)
+	docker compose up --detach --wait db
+
+migrate: ## Apply migrations to DATABASE_URL
+	uv run alembic upgrade head
+
+test: ## Run the test suite (needs Postgres: `make db`)
 	uv run pytest
 
 lint: ## Lint and check formatting without changing files
