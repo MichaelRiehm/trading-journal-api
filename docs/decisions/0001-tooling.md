@@ -52,7 +52,7 @@ Development happens on Windows, while CI and Docker run on Linux. The brief targ
   - Instead of moving the project to 3.14, we installed pre-commit as a separate tool on Python 3.14 (`uv tool install pre-commit --python 3.14`, like `dotnet tool install -g`).
   - The project still runs entirely on 3.15, and the checks pre-commit runs (ruff, mypy) still use the project's 3.15 environment.
   - Revisit when PyYAML ships 3.15 wheels.
-- **No official `python:3.15-slim` Docker image yet**, only release candidates. The Dockerfile uses `debian:trixie-slim` and installs the same Python 3.15.0 build through uv. Revisit in Stage 6.
+- **No official `python:3.15-slim` Docker image yet**, only release candidates. The Dockerfile uses `debian:trixie-slim` and installs the same Python 3.15.0 build through uv. Revisit in Stage 6. _Update 2026-10-26: `python:3.15-slim` was published on 2026-10-24. The switch is tracked in #6._
 - **httpx2 wheels have no PyPI provenance attestation yet.** Trust rests on the maintainers (httpx's original author, under the pydantic GitHub org) and on Starlette recommending it. `PROJECT_BRIEF.md` was updated to name httpx2.
 - **Strict mypy means more annotations up front,** in exchange for catching type errors before tests run.
 - **Contributors need uv, Docker and make installed.** pre-commit is optional but recommended.

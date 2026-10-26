@@ -41,4 +41,4 @@ Layered: router → service → repository. Details in [CLAUDE.md](CLAUDE.md) an
 
 - [0001: Tooling (uv, ruff, mypy, src layout)](docs/decisions/0001-tooling.md)
 
-Learning log: [docs/learning-log.md](docs/learning-log.md)
+Learning log: [docs/learning-log.md](docs/learning-log.md) · Interview prep: [docs/interview-prep.md](docs/interview-prep.md)
