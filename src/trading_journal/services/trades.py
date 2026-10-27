@@ -143,6 +143,7 @@ class TradeService:
     def cancel(self, user_id: uuid.UUID, trade_id: uuid.UUID) -> Trade:
         trade = self.get(user_id, trade_id, for_update=True)
         lifecycle.ensure_can_transition(trade.status, TradeStatus.CANCELLED)
+        trade.cancelled_at = datetime.now(UTC)
         trade.status = TradeStatus.CANCELLED
         return self._commit(trade)
 

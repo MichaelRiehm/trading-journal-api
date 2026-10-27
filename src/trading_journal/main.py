@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from trading_journal.api import auth, health, journal, strategies, trades, users
+from trading_journal.api import analytics, auth, health, journal, reviews, strategies, trades, users
 from trading_journal.api.errors import register_error_handlers
 from trading_journal.config import get_settings
 
@@ -32,6 +32,8 @@ def create_app() -> FastAPI:
     app.include_router(trades.router)
     app.include_router(journal.trade_journal_router)
     app.include_router(journal.entry_router)
+    app.include_router(analytics.router)
+    app.include_router(reviews.router)
     return app
 
 

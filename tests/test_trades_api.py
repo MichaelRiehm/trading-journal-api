@@ -3,7 +3,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from api_helpers import create_strategy, create_trade, plan_payload, registered_headers
+from api_helpers import (
+    create_closed_trade,
+    create_strategy,
+    create_trade,
+    plan_payload,
+    registered_headers,
+)
 
 # --- create ---------------------------------------------------------------------
 
@@ -324,3 +330,14 @@ def test_invalid_limit(api_client: TestClient, limit: str) -> None:
     response = api_client.get("/trades", params={"limit": limit}, headers=headers)
 
     assert response.status_code == 422
+
+
+def test_zero_decimals_are_fixed_point_not_exponent(api_client: TestClient) -> None:
+    # str(Decimal("0.00000000")) is "0E-8"; responses must not use that form.
+    _, headers = registered_headers(api_client)
+    trade = create_closed_trade(
+        api_client, headers, exit_price="100", exit_at="2026-10-03T19:00:00Z", fees="0"
+    )
+    assert trade["fees"] == "0.00000000"
+    assert trade["pnl"] == "0.00000000"
+    assert trade["r_multiple"] == "0.0000"

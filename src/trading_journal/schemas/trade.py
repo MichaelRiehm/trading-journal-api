@@ -23,7 +23,7 @@ from pydantic import (
 
 from trading_journal.domain import calculations
 from trading_journal.domain.enums import AssetType, Exposure, Side, TradeSource, TradeStatus
-from trading_journal.schemas.base import RequestModel
+from trading_journal.schemas.base import DecimalOut, RequestModel
 
 
 def _normalize_symbol(value: object) -> object:
@@ -154,17 +154,18 @@ class TradeRead(BaseModel):
     leverage_factor: int | None
     side: Side
     status: TradeStatus
-    planned_entry: Decimal
-    planned_stop: Decimal
-    planned_target: Decimal
+    planned_entry: DecimalOut
+    planned_stop: DecimalOut
+    planned_target: DecimalOut
     thesis: str
-    entry_price: Decimal | None
+    entry_price: DecimalOut | None
     entry_at: datetime | None
-    quantity: Decimal | None
-    exit_price: Decimal | None
+    quantity: DecimalOut | None
+    exit_price: DecimalOut | None
     exit_at: datetime | None
-    fees: Decimal | None
+    fees: DecimalOut | None
     followed_plan: bool | None
+    cancelled_at: datetime | None
     source: TradeSource
     external_id: str | None
     created_at: datetime
@@ -177,12 +178,12 @@ class TradeRead(BaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def r_per_share(self) -> Decimal:
+    def r_per_share(self) -> DecimalOut:
         return calculations.r_per_share(self.planned_entry, self.planned_stop)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def pnl(self) -> Decimal | None:
+    def pnl(self) -> DecimalOut | None:
         """Net P/L in dollars, after fees. Null until the trade is closed."""
         if (
             self.entry_price is None
@@ -197,7 +198,7 @@ class TradeRead(BaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def r_multiple(self) -> Decimal | None:
+    def r_multiple(self) -> DecimalOut | None:
         net = self.pnl
         if net is None or self.quantity is None:
             return None

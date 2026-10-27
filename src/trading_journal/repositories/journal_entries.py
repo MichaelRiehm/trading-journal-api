@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,6 +40,20 @@ class JournalEntryRepository:
         if phase is not None:
             query = query.where(JournalEntry.phase == phase)
         return self._session.scalars(query.order_by(JournalEntry.created_at, JournalEntry.id)).all()
+
+    def list_for_trades(
+        self, user_id: uuid.UUID, trade_ids: Collection[uuid.UUID]
+    ) -> Sequence[JournalEntry]:
+        """Entries for many trades in one query (not one per trade), oldest first."""
+        if not trade_ids:
+            return []
+        query = (
+            select(JournalEntry)
+            .join(Trade, JournalEntry.trade_id == Trade.id)
+            .where(JournalEntry.trade_id.in_(trade_ids), Trade.user_id == user_id)
+            .order_by(JournalEntry.created_at, JournalEntry.id)
+        )
+        return self._session.scalars(query).all()
 
     def save(self, entry: JournalEntry) -> JournalEntry:
         self._session.flush()
