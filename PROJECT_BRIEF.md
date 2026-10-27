@@ -132,7 +132,7 @@ Layered: router -> service -> repository.
 
 ## Roadmap after Phase 1
 
-- Phase 2: EKS, Terraform, CI/CD to ECR. Gives the API a public HTTPS URL.
+- Phase 2: EKS, Terraform, CI/CD to ECR. Gives the API a public HTTPS URL. Brief: [PHASE_2_BRIEF.md](PHASE_2_BRIEF.md).
 - Phase 3: Integrations. TradingView alert webhook into the journal (creates a planned trade or a journal entry, shared-secret auth, idempotent). Webull OpenAPI read-only sync of filled orders to open and close trades automatically (scheduled job, later a Kubernetes CronJob). The journal never places orders.
 - Phase 4: Algo trading lab, as a separate service. Rules-based versions of the owner's own setups, backtested on historical data, then paper traded in Webull's test environment. Algo trades are logged into the journal with source = algo so they can be compared against discretionary trades. No live money in scope.
 - Optional: Go, as a small separate service or tool.
