@@ -4,6 +4,7 @@ The body is FastAPI's default `{"detail": ...}` for now; Stage 6 settles the err
 """
 
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -12,12 +13,17 @@ from trading_journal.domain.errors import (
     AuthenticationError,
     ConflictError,
     DomainError,
+    InvalidInputError,
     NotFoundError,
 )
+
+# The shape of a route's `responses=` (extra status codes documented in OpenAPI).
+type Responses = dict[int | str, dict[str, Any]]
 
 _STATUS: dict[type[DomainError], int] = {
     NotFoundError: status.HTTP_404_NOT_FOUND,
     ConflictError: status.HTTP_409_CONFLICT,
+    InvalidInputError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     AuthenticationError: status.HTTP_401_UNAUTHORIZED,
 }
 

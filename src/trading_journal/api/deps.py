@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from trading_journal.config import Settings, get_settings
 from trading_journal.db.session import get_session
 from trading_journal.models import User
-from trading_journal.services import AuthService
+from trading_journal.services import AuthService, StrategyService, TradeService
 
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -33,3 +33,15 @@ def get_current_user(token: Annotated[str | None, Depends(_bearer)], auth: AuthS
 # Every protected route takes `user: CurrentUser`. Queries are then scoped by user.id,
 # so another user's row is simply not found (404, not 403).
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def get_strategy_service(session: SessionDep) -> StrategyService:
+    return StrategyService(session)
+
+
+def get_trade_service(session: SessionDep) -> TradeService:
+    return TradeService(session)
+
+
+StrategyServiceDep = Annotated[StrategyService, Depends(get_strategy_service)]
+TradeServiceDep = Annotated[TradeService, Depends(get_trade_service)]

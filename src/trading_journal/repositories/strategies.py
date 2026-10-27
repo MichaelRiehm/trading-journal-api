@@ -1,10 +1,10 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from trading_journal.models import Strategy
+from trading_journal.models import Strategy, Trade
 
 
 class StrategyRepository:
@@ -26,6 +26,20 @@ class StrategyRepository:
         return self._session.scalars(
             select(Strategy).where(Strategy.user_id == user_id).order_by(Strategy.name)
         ).all()
+
+    def get_by_name(self, user_id: uuid.UUID, name: str) -> Strategy | None:
+        return self._session.scalar(
+            select(Strategy).where(Strategy.user_id == user_id, Strategy.name == name)
+        )
+
+    def has_trades(self, user_id: uuid.UUID, strategy_id: uuid.UUID) -> bool:
+        query = select(Trade.id).where(Trade.user_id == user_id, Trade.strategy_id == strategy_id)
+        return self._session.scalar(select(exists(query))) is True
+
+    def save(self, strategy: Strategy) -> Strategy:
+        """Flush pending changes to a loaded strategy, so constraint errors surface here."""
+        self._session.flush()
+        return strategy
 
     def delete(self, strategy: Strategy) -> None:
         self._session.delete(strategy)

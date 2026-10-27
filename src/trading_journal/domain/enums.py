@@ -17,6 +17,13 @@ class Side(StrEnum):
     SHORT = "short"
 
 
+class Exposure(StrEnum):
+    """Which way the trade bets on the market. Derived from side and leverage, never stored."""
+
+    BULLISH = "bullish"
+    BEARISH = "bearish"
+
+
 class AssetType(StrEnum):
     STOCK = "stock"
     ETF = "etf"
