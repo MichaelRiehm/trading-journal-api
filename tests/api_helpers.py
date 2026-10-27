@@ -80,3 +80,16 @@ def create_trade(
         assert response.status_code == 200, response.text
         trade = response.json()
     return trade
+
+
+def create_entry(
+    client: TestClient,
+    headers: dict[str, str],
+    trade_id: str,
+    body: str = "Waiting for the breakout to confirm.",
+    phase: str | None = None,
+) -> Any:
+    payload = {"body": body} if phase is None else {"body": body, "phase": phase}
+    response = client.post(f"/trades/{trade_id}/journal", json=payload, headers=headers)
+    assert response.status_code == 201, response.text
+    return response.json()

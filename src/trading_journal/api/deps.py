@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from trading_journal.config import Settings, get_settings
 from trading_journal.db.session import get_session
 from trading_journal.models import User
-from trading_journal.services import AuthService, StrategyService, TradeService
+from trading_journal.services import AuthService, JournalService, StrategyService, TradeService
 
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -43,5 +43,10 @@ def get_trade_service(session: SessionDep) -> TradeService:
     return TradeService(session)
 
 
+def get_journal_service(session: SessionDep) -> JournalService:
+    return JournalService(session)
+
+
 StrategyServiceDep = Annotated[StrategyService, Depends(get_strategy_service)]
 TradeServiceDep = Annotated[TradeService, Depends(get_trade_service)]
+JournalServiceDep = Annotated[JournalService, Depends(get_journal_service)]
