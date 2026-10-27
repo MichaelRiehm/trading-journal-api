@@ -120,6 +120,9 @@ def test_request_id_header(client: TestClient, sent: str, echoed: bool) -> None:
     assert len(response.headers["X-Request-ID"]) <= 64
 
 
-def test_login_failure_is_a_problem(client: TestClient) -> None:
-    response = client.post("/auth/token", data={"username": unique_email(), "password": PASSWORD})
+def test_login_failure_is_a_problem(api_client: TestClient) -> None:
+    # api_client, not client: this one queries the database.
+    response = api_client.post(
+        "/auth/token", data={"username": unique_email(), "password": PASSWORD}
+    )
     assert_problem(response, 401, "Incorrect email or password")
