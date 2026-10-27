@@ -11,7 +11,14 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from api_helpers import CLOSE_BODY, OPEN_BODY, create_strategy, create_trade, registered_headers
+from api_helpers import (
+    CLOSE_BODY,
+    OPEN_BODY,
+    create_entry,
+    create_strategy,
+    create_trade,
+    registered_headers,
+)
 
 ENDPOINTS: list[tuple[str, str, str, dict[str, Any] | None]] = [
     # (resource, method, path suffix, body)
@@ -64,6 +71,46 @@ def test_other_users_row_looks_exactly_like_a_missing_one(
     after = api_client.get(f"/{resource}/{row['id']}", headers=owner)
     assert after.status_code == 200
     assert after.json() == row
+
+
+JOURNAL_ENDPOINTS: list[tuple[str, str, dict[str, Any] | None]] = [
+    # (method, path template, body); {trade} and {entry} are filled in per call
+    ("GET", "/trades/{trade}/journal", None),
+    ("POST", "/trades/{trade}/journal", {"body": "Not my trade", "phase": "pre"}),
+    ("PATCH", "/journal/{entry}", {"body": "Hijacked"}),
+    ("DELETE", "/journal/{entry}", None),
+]
+
+
+@pytest.mark.parametrize(
+    ("method", "template", "body"),
+    JOURNAL_ENDPOINTS,
+    ids=[f"{m} {t}" for m, t, _ in JOURNAL_ENDPOINTS],
+)
+def test_other_users_journal_looks_exactly_like_a_missing_one(
+    api_client: TestClient, method: str, template: str, body: dict[str, Any] | None
+) -> None:
+    # Journal entries have no user_id of their own; ownership comes through the trade.
+    _, owner = registered_headers(api_client)
+    _, intruder = registered_headers(api_client)
+    trade = create_trade(api_client, owner)
+    entry = create_entry(api_client, owner, trade["id"])
+    journal_url = f"/trades/{trade['id']}/journal"
+    before = api_client.get(journal_url, headers=owner).json()
+
+    def call(trade_id: str, entry_id: str) -> Any:
+        path = template.format(trade=trade_id, entry=entry_id)
+        return api_client.request(method, path, json=body, headers=intruder)
+
+    someone_elses = call(trade["id"], entry["id"])
+    missing = call(str(uuid.uuid7()), str(uuid.uuid7()))
+
+    assert someone_elses.status_code == 404
+    assert (someone_elses.status_code, someone_elses.json()) == (
+        missing.status_code,
+        missing.json(),
+    )
+    assert api_client.get(journal_url, headers=owner).json() == before
 
 
 @pytest.mark.parametrize(

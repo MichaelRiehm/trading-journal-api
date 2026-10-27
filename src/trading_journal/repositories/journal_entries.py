@@ -28,13 +28,18 @@ class JournalEntryRepository:
             .where(JournalEntry.id == entry_id, Trade.user_id == user_id)
         )
 
-    def list_for_trade(self, user_id: uuid.UUID, trade_id: uuid.UUID) -> Sequence[JournalEntry]:
-        return self._session.scalars(
+    def list_for_trade(
+        self, user_id: uuid.UUID, trade_id: uuid.UUID, phase: JournalPhase | None = None
+    ) -> Sequence[JournalEntry]:
+        """Oldest first. The UUIDv7 id breaks ties between entries with the same created_at."""
+        query = (
             select(JournalEntry)
             .join(Trade, JournalEntry.trade_id == Trade.id)
             .where(JournalEntry.trade_id == trade_id, Trade.user_id == user_id)
-            .order_by(JournalEntry.created_at, JournalEntry.id)
-        ).all()
+        )
+        if phase is not None:
+            query = query.where(JournalEntry.phase == phase)
+        return self._session.scalars(query.order_by(JournalEntry.created_at, JournalEntry.id)).all()
 
     def save(self, entry: JournalEntry) -> JournalEntry:
         self._session.flush()
