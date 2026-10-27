@@ -286,3 +286,87 @@ What to be able to explain about this project, collected stage by stage while it
   Least privilege. The migrate job needs only the database URL, so it never receives the JWT signing key. The settings also fail fast: the app refuses to start with a missing or short key, and the validation error never echoes the rejected value (`hide_input_in_errors`).
 - [ ] **Argon2 is slow on purpose. Doesn't that block FastAPI?**
   Not with plain `def` endpoints: FastAPI runs them on a thread pool, and argon2-cffi releases the GIL while hashing. Inside an `async def` endpoint, the same call would block the event loop for every request.
+
+---
+
+## Stage 3: Strategies, trades and the lifecycle
+
+### The domain (be ready to explain it to a non-trader)
+
+- [ ] **What is an R-multiple, and why do traders use it?**
+  - R is the risk you planned per share: the distance from entry to stop.
+  - The R-multiple is the result in units of that risk. +2R means you made twice what you risked, and −1R means you hit your stop.
+  - It makes trades of different sizes and prices comparable, and **expectancy** (the average R) says whether a strategy makes money in the long run.
+  - Ours is **net of fees** and uses the **actual** entry: the honest version.
+
+  → [ADR 0008](decisions/0008-trade-lifecycle-and-derived-values.md)
+- [ ] **Why is buying an inverse ETF a "long" trade?**
+  - `side` is the position you hold. You *bought* SQQQ, and you profit if its price rises.
+  - Calling it a short would flip the P/L sign. The bet on a falling market is captured separately by the computed `exposure` field (bearish).
+  - Leverage never enters the P/L math, because it's already in the ETF's price.
+
+  → [ADR 0007](decisions/0007-short-vs-inverse-etf.md)
+
+### State and concurrency
+
+- [ ] **How is the trade lifecycle enforced?**
+  - Three layers:
+    1. A pure transition table in `domain/lifecycle.py`; illegal moves raise `ConflictError` → 409.
+    2. A row lock for each transition.
+    3. A CHECK constraint that makes inconsistent rows unstorable.
+  - A test derives the full 4×3 status/action matrix from the table, so the test and the code can't drift.
+- [ ] **Why 409 for an illegal transition, and not 400 or 422?**
+  - **409 Conflict** means the request is valid, but it conflicts with the resource's *current state*. Closing an open trade is fine; closing a planned one isn't.
+  - **422** is for a request that's wrong in itself (stop on the wrong side, a malformed price), whatever the state.
+- [ ] **Two "close" requests arrive at the same time. What happens?**
+  - Each loads the trade with `SELECT … FOR UPDATE`. The second blocks until the first commits, then sees `closed` and gets a 409.
+  - Without the lock, both could read `open` and both "succeed", with the last write winning.
+- [ ] **Pessimistic vs optimistic locking: when would you use each?**
+  - **Pessimistic** (`FOR UPDATE`): lock while you work. Simple and correct for short transactions with real contention.
+  - **Optimistic** (a version column, `UPDATE … WHERE version = :v`, then check rows affected): no locks, and conflicts are detected at write time. It's better for long user edit sessions where conflicts are rare.
+  - EF Core does optimistic with `[ConcurrencyCheck]` or a `rowversion` column and throws `DbUpdateConcurrencyException`.
+- [ ] **Why can't the plan be edited after the trade is opened?**
+  The plan is the record that `followed_plan` and plan adherence are measured against. Editing it after entry would rewrite history to look disciplined. `strategy_id` can still change, because that's classification, not history.
+
+### API design
+
+- [ ] **Keyset vs offset pagination?**
+  - **Offset** (`OFFSET 100 LIMIT 50`) shifts when rows are inserted between pages, so you get duplicates or gaps. It also gets slower deeper in, because skipped rows are still read.
+  - **Keyset** (`WHERE id < :last_seen ORDER BY id DESC LIMIT 50`) is stable and uses an index for every page. The cost is no "jump to page N".
+  - UUIDv7 makes the id itself a time-ordered key, so the cursor is just the last id.
+
+  → [ADR 0009](decisions/0009-keyset-pagination.md)
+- [ ] **How does your PATCH tell "set this to null" apart from "don't change it"?**
+  - `model_dump(exclude_unset=True)` returns only the fields the client actually sent. So `{"strategy_id": null}` clears it, and `{}` leaves it alone.
+  - A model validator rejects `null` for required fields.
+  - In ASP.NET you'd need `JsonPatchDocument` or a custom "optional" wrapper to get the same distinction.
+- [ ] **Why reject unknown fields in request bodies?**
+  With the default (ignore), a typo in a PATCH (`planed_stop`) returns 200 and silently changes nothing. Sending a derived value like `pnl` would also look accepted. `extra="forbid"` turns both into a 422.
+- [ ] **Why are money values JSON strings?**
+  Most JSON parsers, JavaScript's included, read numbers as binary floats, so `0.1 + 0.2` problems come back on the client. A string keeps the exact decimal, and the client parses it with a decimal type.
+- [ ] **Where do business rules live vs validation rules?**
+  - **Shape** (types, ranges, symbol format, 8 decimal places) lives in Pydantic schemas: the API's contract, documented in OpenAPI.
+  - **Business rules** (stop side, leverage only on ETFs, transitions, ownership of the strategy) live in services, so create and PATCH share them.
+  - **Integrity** lives in database constraints, as the backstop.
+
+### Python and Pydantic
+
+- [ ] **What's `Decimal` rounding, and why `ROUND_HALF_EVEN`?**
+  - `quantize(Decimal("0.00000001"), rounding=ROUND_HALF_EVEN)` rounds to 8 places. Halfway cases go to the even digit, so rounding errors don't add up in one direction over many trades. It's called banker's rounding.
+  - C#'s `Math.Round(decimal)` defaults to the same `MidpointRounding.ToEven`.
+- [ ] **What's a `computed_field`?**
+  - A `@property` on a Pydantic model that's included in the serialized output and the OpenAPI schema. It's like a C# get-only property that `System.Text.Json` serializes.
+  - We use it so P/L, R and exposure appear in every trade response, but can never be set.
+- [ ] **What's `class Page[T](BaseModel)`?**
+  PEP 695 generic syntax (Python 3.12+): a generic Pydantic model, like `Page<T>` in C#. `Page[TradeRead]` gets its own concrete OpenAPI schema.
+- [ ] **What's the difference between a `BeforeValidator` and an `AfterValidator`?**
+  - **Before** runs on the raw input, before type and constraint checks. We use one to uppercase symbols before the pattern check.
+  - **After** runs on the validated value. We use one to quantize decimals and convert datetimes to UTC.
+  - The gotcha: `StringConstraints(to_upper=True)` runs its pattern check *first*, which rejected `"brk.b"`.
+
+### Bug stories
+
+- [ ] **A create response said `"100"`, but a later read said `"100.00000000"`.**
+  - The production session doesn't expire objects on commit, so the response was built from the client's input. The test session *did* expire them, so tests always re-read from the database and never saw it.
+  - The fix had two parts: normalize inputs to the stored form, and make the test session match production.
+  - **Lesson:** test fixtures that differ from production config hide bugs.

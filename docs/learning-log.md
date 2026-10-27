@@ -113,3 +113,48 @@ Decisions: [ADR 0005](decisions/0005-access-tokens.md) (access tokens) and [ADR 
 ### Interview talking point
 
 "For another user's data the API returns 404, not 403, and that's structural, not a check someone could forget. Every repository query is scoped by the current user's id, so 'not yours' and 'doesn't exist' are the same code path. A test asserts the two responses are byte-for-byte identical. The same principle runs through login: an unknown email still pays for an Argon2 verify against a dummy hash, so response time doesn't reveal who has an account."
+
+## 2026-10-27 — Stage 3: Strategies, trades and the lifecycle
+
+_Drafted by Claude. Not yet reviewed by Michael._
+
+### What I built
+
+- **Strategies:** CRUD under `/strategies`. A duplicate name returns 409, and so does deleting a strategy that still has trades.
+- **Trades:**
+  - plan, list (filters plus keyset pagination), get, PATCH and delete
+  - `open`, `close` and `cancel`: illegal moves return 409, and each move locks the row
+- **Derived values:** pure Decimal math for P/L, R per share, R-multiple, hold time and exposure. It's computed in every response and never accepted as input.
+- **Migration 0002:** leverage only on ETFs, and symbols stored uppercase.
+- **Request bodies reject unknown fields.**
+- 178 tests, about 13 seconds. They cover the full transition matrix and the 404-not-403 check on every endpoint that takes an id.
+
+Decisions: [ADR 0007](decisions/0007-short-vs-inverse-etf.md) (short vs inverse ETF), [ADR 0008](decisions/0008-trade-lifecycle-and-derived-values.md) (lifecycle and derived values) and [ADR 0009](decisions/0009-keyset-pagination.md) (keyset pagination).
+
+### What I learned
+
+- **A state machine can be a dictionary.** `{planned: {open, cancelled}, open: {closed}}` plus one check function covers the whole lifecycle, and the test derives its 12-case matrix from the same table.
+- **`exclude_unset` is what makes PATCH honest.** It separates "the client sent null" from "the client didn't send it", which C# models need extra machinery for.
+- **UUIDv7 pays off again:** time-ordered ids make keyset pagination a one-line `WHERE id < :cursor`.
+- **Validate the merged state before mutating the ORM object.** A rejected PATCH then leaves nothing dirty in the session, and nothing is flushed by accident later.
+
+### What surprised me
+
+- **Pydantic's `StringConstraints(to_upper=True)` checks its pattern *before* uppercasing,** so `"brk.b"` was rejected by an uppercase-only pattern. A `BeforeValidator` fixed it.
+- **The responses changed depending on how the session was configured** (next section).
+
+### Bugs I hit and how I fixed them
+
+- **The create response didn't match a later read.**
+  - The symptom: `"r_per_share": "5"` on create, `"5.00000000"` on GET; and `+09:00` on open, UTC on GET.
+  - **Why the tests missed it:** production sessions keep objects after commit (`expire_on_commit=False`), so a response echoed the client's input. The test session expired them, so every test response was re-read from the database.
+  - **The fix:** quantize decimals and convert datetimes to UTC on input, and make the test session match production.
+  - Caught by the end-to-end check through compose, not by the test suite.
+- **A PATCH with a typo would have been a silent no-op.** Request models now use `extra="forbid"`.
+- **My own mistakes:**
+  - A PowerShell read-and-rewrite of source files (`Set-Content -Encoding ascii`) turned `→` into `???`. Fixed, and I now edit files only with the editor tool.
+  - A migration round trip on the dev database ran `downgrade -1` while it was at 0001, not 0002, which dropped the dev schema and whatever was in it (as far as I know, only throwaway end-to-end test data). **Lesson:** check `alembic current` first, and downgrade to an explicit revision.
+
+### Interview talking point
+
+"The trade lifecycle is enforced at three layers: a transition table in pure Python that turns illegal moves into 409s; `SELECT … FOR UPDATE` so two concurrent closes can't both succeed; and a CHECK constraint that makes an inconsistent row unstorable. The test suite derives every status-and-action combination from the same table, so the tests can't drift from the rules."
