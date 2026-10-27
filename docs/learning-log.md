@@ -189,3 +189,53 @@ _Drafted by Claude. Not yet reviewed by Michael._
 ### Interview talking point
 
 "Trade transitions take a row lock, but journal writes deliberately don't, and I can show why. The allowed journal phases only grow as a trade moves through its lifecycle, so any entry that passed the check stays valid whatever transition commits next. That invariant is a unit test over the same lifecycle table the code uses. If someone changes the rules in a way that breaks it, the test tells them the locking question is back."
+
+## 2026-10-27 — Stage 5: Analytics and weekly review
+
+_Drafted by Claude. Not yet reviewed by Michael._
+
+### What I built
+
+- **Analytics:** `/analytics/summary`, `/equity-curve`, `/breakdown?by=` and `/frequency`.
+  - Filters: a date range plus strategy, symbol, side, asset type and source.
+  - All the math is in pure functions in `domain/analytics.py`.
+- **Weekly review:** `/reviews/weekly?week=2026-W42` returns the week's closed and cancelled trades, their summary, and the journal grouped by phase.
+- **The definitions** ([ADR 0011](decisions/0011-analytics-definitions.md)):
+  - A breakeven (net P/L of exactly 0) is its own bucket but counts in every rate.
+  - Expectancy is the mean P/L.
+  - Drawdown is measured per trade, from a starting peak of 0.
+  - A rate or average with nothing to average is `null`, not 0.
+- **Migration 0003** ([ADR 0012](decisions/0012-weekly-review-and-cancelled-at.md)): `cancelled_at`, with a CHECK and a backfill, so a cancelled trade lands in the week it was actually cancelled.
+- **A fix:** response decimals are now always fixed-point (`"0.00000000"`). Before, `str(Decimal)` had been sending `"0E-8"`.
+- **Tests:** 313, about 24 seconds. No new dependencies.
+
+### What I learned
+
+- **Definitions are the hard part of analytics, not arithmetic.**
+  - "Win rate" has two common denominators. Picking all trades keeps win + loss + breakeven = 100%, and makes expectancy exactly the mean P/L.
+  - A unit test checks that identity, so the definition is enforced, not just documented.
+- **`None` is information.**
+  - A 0% win rate (every trade lost) and "no trades yet" are different facts.
+  - Returning `null` for undefined averages lets a client tell them apart.
+- **Pure functions over a small dataclass, not ORM objects.** The service turns rows into frozen `ClosedTrade` values, then calls the math. So the 26 analytics unit tests run in milliseconds without a database.
+- **Avoiding N+1:** the weekly review loads every journal entry for the week's trades in one `IN (...)` query, then groups them in Python. Three queries per review, however many trades.
+- **ISO weeks have edge cases worth testing:**
+  - 2026 has a week 53 and 2025 doesn't.
+  - 2025-12-29 belongs to `2026-W01`.
+  - `date.fromisocalendar` handles all of this; a strict regex in front of it rejects the rest.
+
+### What surprised me
+
+- **`Decimal("0.00000000")` prints as `"0E-8"`.** Python switches to exponent notation when the exponent is below -6. The API had been returning `"fees": "0E-8"` for trades closed without fees since Stage 3. Nobody noticed, because no test compared a zero.
+  - Analytics would have made it constant (drawdown 0, total fees 0).
+  - Now one annotated type, `DecimalOut`, serializes every response decimal with `format(d, "f")`.
+- **Cancelled trades had no "when".** The weekly review was the first feature that needed it. `updated_at` looked like an answer until I noticed it moves when a strategy is reassigned.
+
+### Bugs I hit and how I fixed them
+
+- **SQLAlchemy 2.1 types `select(Trade)` as `Select[Trade]`,** not `Select[tuple[Trade]]` like 2.0. mypy caught the old spelling in the new repository helpers.
+- **`dict(result)` doesn't work on a SQLAlchemy `Result`.** It has a `.keys()` method (the column names), so `dict()` treats it as a mapping and tries to index it. `Result.tuples()` is deprecated in 2.1. `dict(result.all())` works. Ruff had flagged its own suggested rewrite as "unsafe", and this is why.
+
+### Interview talking point
+
+"Before writing any analytics, I wrote down what each metric means. A breakeven trade is its own bucket but stays in the win-rate denominator, so the rates add to 100% and expectancy is exactly the mean P/L, an identity a unit test checks. Drawdown is per trade from a starting peak of 0, on the same points the equity-curve endpoint returns, so the two can't disagree. And an average of nothing is null, not 0, because 'you lost every trade' and 'you have no trades' are different answers."

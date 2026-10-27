@@ -398,3 +398,62 @@ What to be able to explain about this project, collected stage by stage while it
   - The journal is free text no number depends on. Transparency (`updated_at` in every response) is enough, and Stage 5 can flag edited entries.
 - [ ] **Why can't a test see `updated_at` change?**
   Postgres's `now()` returns the **transaction start time**, constant for the whole transaction, and each test is one rolled-back transaction. Production requests are separate transactions, so it does advance, which I verified against the running stack. `clock_timestamp()` gives wall-clock time within a transaction, if that's ever needed.
+
+---
+
+## Stage 5: Analytics and weekly review
+
+- [ ] **How does a breakeven trade count?**
+  - **Exactly 0 net P/L after fees** is breakeven: neither a win nor a loss, reported separately. A gain smaller than the fees is a loss.
+  - **It stays in the denominator** of the win rate and plan adherence.
+  - **Why exactly 0 and not a band:** any band (±$1, ±0.1R) is arbitrary. Exactly 0 is objective.
+
+  → [ADR 0011](decisions/0011-analytics-definitions.md)
+- [ ] **Why is win rate wins / all trades, not wins / (wins + losses)?**
+  - **The rates add up:** win rate + loss rate + breakeven rate = 1.
+  - **Expectancy stays exactly the mean P/L.** The textbook `p(win) × avg win + p(loss) × avg loss` matches it because breakevens add 0, and a unit test asserts it.
+  - **The alternative flatters the number:** 1 win, 1 loss and 8 scratches would show 50%.
+- [ ] **What is expectancy, and why give it in R as well as dollars?**
+  - **What it is:** the average result per trade. Positive means the system makes money over many trades, even with a low win rate (big winners, small losers).
+  - **Why R too:** R normalizes by planned risk, so trades of different sizes compare. +0.33R per trade means each trade made a third of what it risked, on average.
+  - **"Average R" and "expectancy in R" are the same number,** so the API returns it once.
+- [ ] **How is max drawdown computed?**
+  - **The method:** walk the cumulative P/L after each trade, tracking the running peak. The drawdown is the largest `peak − current`.
+  - **The peak starts at 0,** so losing from the first trade counts.
+  - **It's per trade, not per day,** so a same-day loss followed by a recovery isn't hidden. It uses the exact points the equity-curve endpoint returns.
+  - **Cost:** O(n), one pass.
+- [ ] **Why return `null` instead of 0 for an empty average?**
+  - **They're different facts:** a 0% win rate means you lost every trade, while `null` means there's nothing to measure.
+  - **Counts and totals are still 0,** because an empty sum really is 0.
+  - **In C# terms,** it's `decimal?` vs `decimal`.
+- [ ] **Why compute analytics in Python rather than SQL?**
+  - **The brief:** it asks for pure functions with database-free unit tests.
+  - **Drawdown:** it needs ordered, per-trade math.
+  - **Scale:** one trader's data is small (hundreds of closed trades a year).
+  - **The trade-off:** it loads the rows, where SQL `SUM` and `AVG` would push the work to the database.
+  - **The escape hatch:** if a profile ever shows the loading is the bottleneck, the totals can move into SQL behind the same function signatures. Know the window-function version: `SUM(pnl) OVER (ORDER BY exit_at)` for the curve, then `MAX(...) OVER (...)` for the running peak.
+- [ ] **What is the N+1 query problem, and where did you avoid it?**
+  - **The problem:** load N parents with 1 query, then each one's children with 1 query apiece: N+1 round trips.
+  - **Where I avoided it:** the weekly review loads every journal entry for the week's trades in one `WHERE trade_id IN (...)` query, then groups them in Python. That makes three queries per review, whatever the number of trades.
+  - **The ORM alternative:** eager loading with `selectinload` (SQLAlchemy) or `.Include()` (EF Core).
+- [ ] **How do you parse and validate an ISO week like `2026-W42`?**
+  - **First a strict regex,** `\d{4}-W\d{2}`.
+  - **Then `date.fromisocalendar(year, week, 1)`,** which rejects weeks that don't exist (W00, W54, W53 in a 52-week year). Both failures become a 422.
+  - **The edge cases:**
+    - The ISO year can differ from the calendar year: 2025-12-29 is in 2026-W01.
+    - A year has 53 weeks when it starts on a Thursday, or on a Wednesday in a leap year.
+  - **The window is Monday 00:00 UTC up to (not including) the next Monday:** half-open, so no instant falls in two weeks.
+- [ ] **Why add a `cancelled_at` column instead of using `updated_at`?**
+  - **`updated_at` means "last edited".** It moves when a cancelled trade's strategy is reassigned, which would move the trade into the wrong week.
+  - **The migration has three parts:**
+    1. it adds the nullable column
+    2. it **backfills** the existing cancelled rows from `updated_at`, the best available estimate
+    3. it extends the CHECK so the column is set exactly when the status is cancelled
+  - **A test runs the migration over pre-existing rows.**
+
+  → [ADR 0012](decisions/0012-weekly-review-and-cancelled-at.md)
+- [ ] **Why does `Decimal("0.00000000")` serialize as `"0E-8"`, and why does it matter?**
+  - **The cause:** Python's `str(Decimal)` uses exponent notation when the exponent is below -6.
+  - **Why it matters:** the JSON was valid, but `decimal.Parse("0E-8")` in .NET throws without `NumberStyles.Float`, and humans misread it.
+  - **The fix:** a reusable annotated type, `Annotated[Decimal, PlainSerializer(lambda d: format(d, "f"), when_used="json")]`, on every response decimal.
+  - **The lesson:** test the boundary values (zero) of your output format, not only typical ones.
