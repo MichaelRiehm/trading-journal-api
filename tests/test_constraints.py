@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from factories import add_trade, make_user
-from trading_journal.domain.enums import Side, TradeStatus
+from trading_journal.domain.enums import AssetType, Side, TradeStatus
 from trading_journal.repositories import StrategyRepository, UserRepository
 
 OPENED: dict[str, Any] = {
@@ -27,7 +27,9 @@ OPENED: dict[str, Any] = {
         ({"planned_entry": Decimal("-1"), "planned_stop": Decimal("-2")}, "prices_positive"),
         ({"planned_stop": Decimal("105")}, "stop_on_losing_side"),  # long, stop above entry
         ({"side": Side.SHORT, "planned_stop": Decimal("95")}, "stop_on_losing_side"),
-        ({"leverage_factor": 4}, "leverage_factor_allowed"),
+        ({"asset_type": AssetType.ETF, "leverage_factor": 4}, "leverage_factor_allowed"),
+        ({"leverage_factor": 2}, "leverage_only_etf"),  # the factory's default is a stock
+        ({"symbol": "aapl"}, "symbol_uppercase"),
         ({**OPENED, "quantity": Decimal("0")}, "quantity_positive"),
         ({"status": TradeStatus.OPEN}, "status_fields"),  # open without entry fields
         ({"entry_price": Decimal("100")}, "status_fields"),  # planned with an entry
@@ -67,7 +69,7 @@ def test_valid_short_and_inverse_etf_trades_are_accepted(session: Session) -> No
     user = make_user(session)
     add_trade(session, user.id, side=Side.SHORT, planned_stop=Decimal("105"))
     # An inverse ETF is a LONG trade with a negative leverage factor.
-    add_trade(session, user.id, symbol="SQQQ", leverage_factor=-3)
+    add_trade(session, user.id, symbol="SQQQ", asset_type=AssetType.ETF, leverage_factor=-3)
 
 
 def test_trade_cannot_use_another_users_strategy(session: Session) -> None:

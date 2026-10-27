@@ -56,6 +56,9 @@ class Trade(UUIDPrimaryKey, Timestamps, Base):
             "leverage_factor IS NULL OR leverage_factor IN (2, 3, -2, -3)",
             name="leverage_factor_allowed",
         ),
+        # Leveraged and inverse products are ETFs; see ADR 0007.
+        CheckConstraint("leverage_factor IS NULL OR asset_type = 'etf'", name="leverage_only_etf"),
+        CheckConstraint("symbol = upper(symbol)", name="symbol_uppercase"),
         CheckConstraint(
             "(side = 'long' AND planned_stop < planned_entry)"
             " OR (side = 'short' AND planned_stop > planned_entry)",

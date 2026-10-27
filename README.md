@@ -2,7 +2,7 @@
 
 A REST API where a swing trader plans trades before entering, logs the result, journals thoughts before, during and after each trade, and gets analytics plus a weekly review of habits.
 
-**Status:** Stage 2 (auth). The schema, migrations and repositories are in place, along with register, login and the current user. Trades and strategies come in Stage 3. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
+**Status:** Stage 3 (strategies, trades and the lifecycle). You can register, plan trades, open and close them, and see P/L and R-multiples. Journal entries come in Stage 4, and analytics in Stage 5. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
 
 ## Endpoints so far
 
@@ -13,6 +13,16 @@ A REST API where a swing trader plans trades before entering, logs the result, j
 | POST | `/auth/register` | none | Create an account (JSON: `email`, `password`, 12–128 characters) |
 | POST | `/auth/token` | none | OAuth2 password flow (form: `username` = email, `password`); returns a bearer token |
 | GET | `/users/me` | bearer | The current user |
+| POST, GET | `/strategies` | bearer | Create a strategy; list yours (sorted by name) |
+| GET, PATCH, DELETE | `/strategies/{id}` | bearer | Read, rename or delete one (409 while it has trades) |
+| POST | `/trades` | bearer | Plan a trade (every trade starts as `planned`) |
+| GET | `/trades` | bearer | List, newest first. Filters: `status`, `strategy_id`, `symbol`, `side`, `asset_type`, `source`. Paging: `limit`, `cursor` |
+| GET, PATCH, DELETE | `/trades/{id}` | bearer | Read, edit the plan (only while planned) or reassign the strategy, delete |
+| POST | `/trades/{id}/open` | bearer | planned → open: record the entry |
+| POST | `/trades/{id}/close` | bearer | open → closed: record the exit; the response includes P/L, R-multiple and hold time |
+| POST | `/trades/{id}/cancel` | bearer | planned → cancelled |
+
+Money values are JSON strings (`"98.00000000"`), so they never pass through a float. Another user's ids return 404, and illegal lifecycle moves return 409.
 
 In `/docs`, register, then click **Authorize** and log in with your email as the username.
 
@@ -59,5 +69,8 @@ Layered: router → service → repository. Details in [CLAUDE.md](CLAUDE.md) an
 - [0004: Schema conventions](docs/decisions/0004-schema-conventions.md)
 - [0005: Access tokens](docs/decisions/0005-access-tokens.md)
 - [0006: Password handling](docs/decisions/0006-password-handling.md)
+- [0007: Short positions vs inverse ETFs](docs/decisions/0007-short-vs-inverse-etf.md)
+- [0008: Trade lifecycle and derived values](docs/decisions/0008-trade-lifecycle-and-derived-values.md)
+- [0009: Keyset pagination](docs/decisions/0009-keyset-pagination.md)
 
 Learning log: [docs/learning-log.md](docs/learning-log.md) · Interview prep: [docs/interview-prep.md](docs/interview-prep.md)

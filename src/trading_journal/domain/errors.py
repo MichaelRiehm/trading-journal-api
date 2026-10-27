@@ -20,5 +20,9 @@ class ConflictError(DomainError):
     """The request clashes with existing state: a duplicate, or an illegal transition."""
 
 
+class InvalidInputError(DomainError):
+    """Well-formed input that breaks a business rule the schema alone can't check."""
+
+
 class AuthenticationError(DomainError):
     """Missing or bad credentials. Never says which part was wrong."""

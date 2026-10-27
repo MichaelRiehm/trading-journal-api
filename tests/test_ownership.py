@@ -1,65 +1,78 @@
-"""The ownership pattern every resource route follows from Stage 3 on.
+"""Another user's data is indistinguishable from data that doesn't exist: 404, never 403.
 
-A route takes `CurrentUser`, the repository query is scoped by `user.id`, and a miss raises
-NotFoundError. So another user's row and a row that doesn't exist produce the same 404, and
-ids can't be probed. The probe route is registered only on the test app.
+Every strategy and trade endpoint that takes an id is checked. Services query by
+(user.id, id), so "not yours" and "doesn't exist" are the same code path. These tests
+make sure no endpoint skips that, and that the row is untouched afterwards.
 """
 
 import uuid
-from collections.abc import Iterator
+from typing import Any
 
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
-from api_helpers import registered_headers
-from trading_journal.api.deps import CurrentUser, SessionDep
-from trading_journal.domain.errors import NotFoundError
-from trading_journal.repositories import StrategyRepository
+from api_helpers import CLOSE_BODY, OPEN_BODY, create_strategy, create_trade, registered_headers
 
-
-@pytest.fixture
-def probe_client(app: FastAPI) -> Iterator[TestClient]:
-    @app.get("/_probe/strategies/{strategy_id}")
-    def get_strategy(
-        strategy_id: uuid.UUID, user: CurrentUser, session: SessionDep
-    ) -> dict[str, str]:
-        strategy = StrategyRepository(session).get(user.id, strategy_id)
-        if strategy is None:
-            raise NotFoundError("Strategy")
-        return {"name": strategy.name}
-
-    with TestClient(app) as client:
-        yield client
+ENDPOINTS: list[tuple[str, str, str, dict[str, Any] | None]] = [
+    # (resource, method, path suffix, body)
+    ("strategies", "GET", "", None),
+    ("strategies", "PATCH", "", {"name": "Hijacked"}),
+    ("strategies", "DELETE", "", None),
+    ("trades", "GET", "", None),
+    ("trades", "PATCH", "", {"planned_target": "200"}),
+    ("trades", "DELETE", "", None),
+    ("trades", "POST", "/open", OPEN_BODY),
+    ("trades", "POST", "/close", CLOSE_BODY),
+    ("trades", "POST", "/cancel", None),
+]
 
 
-def test_owner_can_read_own_strategy(probe_client: TestClient, session: Session) -> None:
-    owner, headers = registered_headers(probe_client)
-    strategy = StrategyRepository(session).add(user_id=uuid.UUID(owner["id"]), name="Breakout")
-
-    response = probe_client.get(f"/_probe/strategies/{strategy.id}", headers=headers)
-
-    assert response.status_code == 200
-    assert response.json() == {"name": "Breakout"}
-
-
-def test_other_users_strategy_looks_exactly_like_a_missing_one(
-    probe_client: TestClient, session: Session
+@pytest.mark.parametrize(
+    ("resource", "method", "suffix", "body"),
+    ENDPOINTS,
+    ids=[f"{m} /{r}/{{id}}{s}" for r, m, s, _ in ENDPOINTS],
+)
+def test_other_users_row_looks_exactly_like_a_missing_one(
+    api_client: TestClient,
+    resource: str,
+    method: str,
+    suffix: str,
+    body: dict[str, Any] | None,
 ) -> None:
-    owner, _ = registered_headers(probe_client)
-    _, intruder_headers = registered_headers(probe_client)
-    strategy = StrategyRepository(session).add(user_id=uuid.UUID(owner["id"]), name="Breakout")
+    _, owner = registered_headers(api_client)
+    _, intruder = registered_headers(api_client)
+    row = (
+        create_strategy(api_client, owner)
+        if resource == "strategies"
+        else create_trade(api_client, owner)
+    )
 
-    someone_elses = probe_client.get(f"/_probe/strategies/{strategy.id}", headers=intruder_headers)
-    missing = probe_client.get(f"/_probe/strategies/{uuid.uuid7()}", headers=intruder_headers)
+    def call(row_id: str) -> Any:
+        return api_client.request(
+            method, f"/{resource}/{row_id}{suffix}", json=body, headers=intruder
+        )
+
+    someone_elses = call(row["id"])
+    missing = call(str(uuid.uuid7()))
 
     assert someone_elses.status_code == 404
-    assert someone_elses.status_code == missing.status_code
-    assert someone_elses.json() == missing.json() == {"detail": "Strategy not found"}
+    assert (someone_elses.status_code, someone_elses.json()) == (
+        missing.status_code,
+        missing.json(),
+    )
+    # And nothing happened to the owner's row.
+    after = api_client.get(f"/{resource}/{row['id']}", headers=owner)
+    assert after.status_code == 200
+    assert after.json() == row
 
 
-def test_probe_requires_authentication(probe_client: TestClient) -> None:
-    response = probe_client.get(f"/_probe/strategies/{uuid.uuid7()}")
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("GET", "/strategies"), ("POST", "/strategies"), ("GET", "/trades"), ("POST", "/trades")],
+)
+def test_collection_endpoints_require_authentication(
+    api_client: TestClient, method: str, path: str
+) -> None:
+    response = api_client.request(method, path, json={})
 
     assert response.status_code == 401
