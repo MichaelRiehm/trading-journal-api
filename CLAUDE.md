@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Short working guide. `PROJECT_BRIEF.md` is the source of truth and the long reference; read it before starting a stage.
+Short working guide. `PROJECT_BRIEF.md` is the source of truth and the long reference; read it before starting a stage. Phase 2 (EKS, Terraform, CI/CD to ECR) has its own brief, `PHASE_2_BRIEF.md`, which adds to it: read both before a Phase 2 stage.
 
 ## What this is
 
