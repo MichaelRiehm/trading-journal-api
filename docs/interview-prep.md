@@ -211,3 +211,78 @@ What to be able to explain about this project, collected stage by stage while it
   - Fixed with `127.0.0.1` and a `connect_timeout` everywhere.
   - **Lessons:** always set network timeouts, and dump a stack when something hangs rather than guessing.
 - [ ] **The migrate container said "No 'script_location' key".** `COPY` before `WORKDIR` in the Dockerfile put `alembic.ini` in `/`. **Lesson:** in a Dockerfile, relative paths follow the `WORKDIR` in effect at that line.
+
+---
+
+## Stage 2: Auth
+
+### Tokens
+
+- [ ] **What's inside a JWT, and is it encrypted?**
+  - It's three base64url parts: `header.payload.signature`.
+  - It's **signed, not encrypted.** Anyone can read the claims (try pasting one into jwt.io), but nobody can change them without the key.
+  - So: never put secrets in a JWT. Ours carries `sub`, `iat`, `exp`, `iss` and `aud`.
+
+  → [ADR 0005](decisions/0005-access-tokens.md)
+- [ ] **HS256 vs RS256: when would you use each?**
+  - **HS256:** one shared secret both signs and verifies. Right when the issuer and verifier are the same service, as here.
+  - **RS256 or EdDSA:** a private key signs, and a public key verifies. Right when *other* services must verify tokens without being able to mint them; they fetch the public key from a JWKS endpoint.
+  - The ASP.NET equivalent is `SymmetricSecurityKey` vs `RsaSecurityKey` in `TokenValidationParameters`.
+- [ ] **What is the `alg: none` attack, and how does your code prevent it?**
+  - An attacker sends a token with header `alg: none` and no signature. A naive library trusts the header and skips verification.
+  - In the related algorithm-confusion attack, the attacker switches RS256 to HS256 and signs with the *public* key as an HMAC secret.
+  - Defence: decode with a pinned `algorithms=["HS256"]` list, never the token's own header. There's a test for each case.
+- [ ] **Stateless JWTs can't be revoked. How do you live with that?**
+  - Short expiry (60 minutes), no refresh tokens, and the user is loaded on every request, so a deleted user is locked out at once.
+  - If revocation is ever needed: a per-user "valid after" timestamp compared with `iat`, or a deny-list of `jti` values. Either brings back a lookup, which is the price of revocation.
+- [ ] **JWT vs server-side sessions?**
+  - **Sessions:** instant revocation, but a shared store (Redis or the database) and CSRF handling if cookies are used.
+  - **JWTs:** no shared state, so any replica can verify. That suits Kubernetes.
+  - For one service with one user, both work. I chose JWTs because the brief and the OAuth2 flow in `/docs` expect bearer tokens.
+- [ ] **Why does every 401 look the same?**
+  Missing, expired, tampered and deleted-user tokens all return the same status, message and `WWW-Authenticate: Bearer` header. Details would help an attacker and not a legitimate client. RFC 6750 requires the header.
+- [ ] **What's the OAuth2 "password flow", and isn't it deprecated?**
+  - The client posts `username` and `password` as a form to the token endpoint and gets back an access token.
+  - OAuth 2.1 drops it, because it hands the password to a client app. That matters for *third-party* clients.
+  - For a first-party API it's just a login form. We use its shape because FastAPI's `/docs` "Authorize" button speaks it.
+
+### Passwords
+
+- [ ] **Why Argon2id over bcrypt?**
+  - Argon2id is *memory-hard*: each guess needs megabytes of RAM, which makes GPU and ASIC cracking far more expensive.
+  - bcrypt is CPU-hard only, and it silently truncates passwords at 72 bytes.
+  - OWASP's first choice is Argon2id.
+
+  → [ADR 0006](decisions/0006-password-handling.md)
+- [ ] **What's a salt, and where is it stored?**
+  - It's random bytes mixed into each hash, so identical passwords produce different hashes and precomputed (rainbow) tables are useless.
+  - It's stored inside the PHC hash string itself (`$argon2id$v=19$m=…$salt$hash`), together with the parameters. That's why there's no salt column.
+- [ ] **What's a timing attack on login, and how did you prevent it?**
+  - If "unknown email" returns faster than "wrong password", response times reveal which emails are registered.
+  - Defence: for an unknown email, verify against a dummy hash anyway, so both paths pay the Argon2 cost and return the same 401.
+- [ ] **What happens when you want stronger hashing parameters later?**
+  `verify_and_update` notices that a stored hash uses old parameters and, on successful login, returns a fresh hash, which we save. Upgrades roll out as users log in, with no migration. There's a test that plants a weak hash and checks it gets upgraded.
+- [ ] **Why 12–128 characters and no "must contain a symbol" rules?**
+  - NIST 800-63B: length beats composition rules, which mostly produce `Password1!`.
+  - The upper cap stops someone from submitting huge inputs to burn CPU.
+
+### FastAPI and design
+
+- [ ] **How does `Depends` compare with ASP.NET Core DI and `[Authorize]`?**
+  - `Depends(fn)` declares "call `fn` and inject its result", resolved per request. Dependencies can depend on other dependencies.
+  - `CurrentUser = Annotated[User, Depends(get_current_user)]` plays the role of `[Authorize]` plus `HttpContext.User` in one parameter: if the dependency raises, the endpoint never runs.
+  - The key difference: there's no container registration. The function *is* the registration.
+  - Tests swap dependencies with `app.dependency_overrides`, like replacing a service in `WebApplicationFactory`.
+- [ ] **401 vs 403 vs 404: which do you return for another user's trade, and why?**
+  - **401:** we don't know who you are.
+  - **403:** we know who you are, and you can't do this.
+  - For another user's resource we return **404**. A 403 would confirm that the id exists.
+  - Queries are scoped by `user_id`, so "not yours" and "doesn't exist" are literally the same code path. A test asserts the two responses are identical.
+- [ ] **How do services report errors without knowing about HTTP?**
+  - Services raise domain errors (`NotFoundError`, `ConflictError`, `AuthenticationError`).
+  - One exception-handler table in `api/errors.py` maps them to 404, 409 and 401.
+  - That's the same idea as ASP.NET exception-handling middleware or `ProblemDetails` mapping.
+- [ ] **Why split `Settings` into `DatabaseSettings` and `Settings`?**
+  Least privilege. The migrate job needs only the database URL, so it never receives the JWT signing key. The settings also fail fast: the app refuses to start with a missing or short key, and the validation error never echoes the rejected value (`hide_input_in_errors`).
+- [ ] **Argon2 is slow on purpose. Doesn't that block FastAPI?**
+  Not with plain `def` endpoints: FastAPI runs them on a thread pool, and argon2-cffi releases the GIL while hashing. Inside an `async def` endpoint, the same call would block the event loop for every request.

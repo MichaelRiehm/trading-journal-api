@@ -14,6 +14,8 @@ Layered: **router → service → repository**.
 - **Repositories**: all SQLAlchemy queries. No business rules.
 - Pydantic schemas (Create / Update / Read per resource) are separate from ORM models.
 - Analytics math lives in pure functions with unit tests that don't need a database.
+- Protected routes take `user: CurrentUser` (`api/deps.py`) and pass `user.id` into scoped repository queries. Services raise errors from `domain/errors.py`; `api/errors.py` maps them to HTTP status codes.
+- API tests use the `api_client` fixture (requests share the test's rolled-back session) and the helpers in `tests/api_helpers.py`.
 
 ## Domain rules that are easy to get wrong
 
