@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from trading_journal.api.deps import AuthServiceDep, SettingsDep
+from trading_journal.api.errors import problem
 from trading_journal.schemas.auth import TokenResponse
 from trading_journal.schemas.user import UserCreate, UserRead
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
-    responses={status.HTTP_409_CONFLICT: {"description": "Email is already registered"}},
+    responses=problem(status.HTTP_409_CONFLICT, "Email is already registered"),
 )
 def register(body: UserCreate, auth: AuthServiceDep) -> UserRead:
     user = auth.register(body.email, body.password)
@@ -22,7 +23,7 @@ def register(body: UserCreate, auth: AuthServiceDep) -> UserRead:
 
 @router.post(
     "/token",
-    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Incorrect email or password"}},
+    responses=problem(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password"),
 )
 def token(
     form: Annotated[OAuth2PasswordRequestForm, Depends()],

@@ -61,3 +61,30 @@ jobs:
 
       - name: Test
         run: make test
+
+  # The runtime image builds, runs as non-root, and stays small (ADR 0015).
+  image:
+    name: image
+    runs-on: ubuntu-24.04
+    env:
+      IMAGE: trading-journal-api:ci
+      MAX_IMAGE_MB: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build
+        run: docker build --tag "$IMAGE" .
+
+      - name: Runs as a non-root user and imports the app
+        run: |
+          uid=$(docker run --rm "$IMAGE" id -u)
+          test "$uid" != "0" || { echo "image runs as root"; exit 1; }
+          docker run --rm "$IMAGE" python -c "import trading_journal.main"
+
+      - name: Size budget
+        run: |
+          size_mb=$(( $(docker image inspect "$IMAGE" --format '{{.Size}}') / 1024 / 1024 ))
+          echo "Image size: ${size_mb} MB (budget ${MAX_IMAGE_MB} MB)"
+          test "$size_mb" -le "$MAX_IMAGE_MB"

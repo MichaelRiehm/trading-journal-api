@@ -47,7 +47,7 @@ def test_duplicate_email_is_a_conflict(api_client: TestClient, second: str) -> N
     response = api_client.post("/auth/register", json={"email": second, "password": PASSWORD})
 
     assert response.status_code == 409
-    assert response.json() == {"detail": "Email is already registered"}
+    assert response.json()["detail"] == "Email is already registered"
 
 
 @pytest.mark.parametrize(
@@ -92,7 +92,7 @@ def test_bad_credentials_are_unauthorized(api_client: TestClient, known_email: b
 
     # Same status and message either way, so the response doesn't reveal which emails exist.
     assert response.status_code == 401
-    assert response.json() == {"detail": "Incorrect email or password"}
+    assert response.json()["detail"] == "Incorrect email or password"
     assert response.headers["WWW-Authenticate"] == "Bearer"
 
 

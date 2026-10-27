@@ -457,3 +457,64 @@ What to be able to explain about this project, collected stage by stage while it
   - **Why it matters:** the JSON was valid, but `decimal.Parse("0E-8")` in .NET throws without `NumberStyles.Float`, and humans misread it.
   - **The fix:** a reusable annotated type, `Annotated[Decimal, PlainSerializer(lambda d: format(d, "f"), when_used="json")]`, on every response decimal.
   - **The lesson:** test the boundary values (zero) of your output format, not only typical ones.
+
+---
+
+## Stage 6: Hardening
+
+- [ ] **What is RFC 9457, and why use it for errors?**
+  - **What it is:** "Problem Details for HTTP APIs", served as `application/problem+json`, with the fields `type`, `title`, `status`, `detail` and `instance`, plus any extension members (ours: `request_id`, `errors`).
+  - **Why:** it's a standard that gateways and frameworks understand. ASP.NET Core's `ProblemDetails` is the same thing, and so is Spring's `ProblemDetail`.
+  - **`type: about:blank`** means "no meaning beyond the status code". Specific type URIs can be added later without breaking clients.
+
+  → [ADR 0013](decisions/0013-error-responses-and-pagination.md)
+- [ ] **Why must validation errors not echo the input?**
+  - **FastAPI's default 422 includes `input`,** the rejected value. For `/auth/register` that's the password.
+  - **Where it would end up:** response bodies land in browser devtools, proxy logs and error trackers.
+  - **What we keep:** only `loc`, `msg` and `type`. A test sends a short password and asserts it isn't anywhere in the response.
+- [ ] **What should a 500 contain?**
+  - **Nothing internal:** a generic message plus a request id.
+  - **Why:** exception text can include SQL, file paths or data.
+  - **Where the details go:** the logs, under the same request id. The client and the server each see what they need.
+- [ ] **What is a request id, and how does yours work?**
+  - **What it is:** a correlation id that is in the response header, the error body and every log line for that request.
+  - **Ours:**
+    - a client may send `X-Request-ID`, but only 1–64 characters of `[A-Za-z0-9._-]` are accepted, to prevent log injection
+    - otherwise a UUID4 is generated
+  - **In a microservice setup,** it would be forwarded to downstream calls. W3C `traceparent` and OpenTelemetry are the standard next step.
+- [ ] **How do you keep secrets out of logs?**
+  - **By construction:**
+    - never log headers (tokens), bodies (passwords) or query strings
+    - log extra fields only from an allowlist
+    - create the engine with `hide_parameters=True`, so SQLAlchemy errors don't quote values like a password hash
+  - **Proven by a test:** it exercises register, login, a failed login and a conflict, then searches the captured logs for the password, hash and token.
+
+  → [ADR 0014](decisions/0014-structured-logging.md)
+- [ ] **What is a `ContextVar`, and what's the threading gotcha?**
+  - **What it is:** per-task (or per-thread) state that flows into child tasks. It's Python's equivalent of .NET's `AsyncLocal<T>`.
+  - **The gotcha:** FastAPI runs sync dependencies in a thread pool with a *copy* of the context, so a value *set* there doesn't flow back to the middleware.
+  - **The fix:** the ContextVar holds a mutable `RequestContext` object, and the dependency mutates the object.
+- [ ] **Pure ASGI middleware vs `BaseHTTPMiddleware`?**
+  - **`BaseHTTPMiddleware`** (`@app.middleware("http")`) is convenient, but it wraps the request and response in extra layers and has had edge cases with streaming and exceptions.
+  - **A pure ASGI middleware** is a callable `(scope, receive, send)` that wraps `send` to see the status and add a header. It's small and predictable, and it can catch any exception to return a 500.
+  - **The .NET parallel:** ASP.NET Core's `app.Use(async (ctx, next) => ...)` middleware.
+- [ ] **Why are some lists paginated and others not?**
+  - **Collections that grow without bound** (`/trades`) use keyset pagination (`items`, `next_cursor`).
+  - **Small collections bounded by a parent or the user** (strategies, a trade's journal, breakdown groups) return plain arrays, so clients don't pay a cursor round trip for a case that can't happen.
+  - **The rule is written down** (ADR 0013), so it's a convention, not an accident.
+- [ ] **How did you shrink the Docker image, and why not Alpine?**
+  - **The switch:** from Debian plus uv's standalone CPython (140 MB) to the official `python:3.15.0-slim-trixie`, copying only the locked venv into the runtime stage. That took 412 MB down to 290.
+  - **Why not Alpine:** musl breaks the manylinux wheels (psycopg-binary, pydantic-core) and has DNS and performance quirks.
+  - **Why not distroless:** it has no Python 3.15 yet and no shell for debugging.
+  - **Keeping it small:** a CI job enforces a 300 MB budget.
+
+  → [ADR 0015](decisions/0015-runtime-image.md)
+- [ ] **Why run the container as non-root?**
+  - **Limiting the damage:** if the app is compromised, the attacker doesn't get root in the container, which makes escaping to the host and tampering with files harder.
+  - **The side effect:** the app can't write `.pyc` files, which is why bytecode is precompiled at build time.
+  - **Kubernetes** (Phase 2) can then enforce `runAsNonRoot: true`.
+- [ ] **Why a `HEALTHCHECK` in the image and `/health` vs `/ready`?**
+  - **`/health` is liveness:** the process answers.
+  - **`/ready` is readiness:** the database is reachable.
+  - **Why it matters:** an orchestrator restarts a container that fails liveness, but only stops sending traffic to one that fails readiness. Restarting the API because Postgres blipped would make things worse.
+  - **The image's `HEALTHCHECK`** probes liveness.

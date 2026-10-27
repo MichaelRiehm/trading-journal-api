@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from trading_journal.api.deps import AnalyticsServiceDep, CurrentUser
+from trading_journal.api.errors import UNAUTHORIZED
 from trading_journal.domain.iso_week import week_label
 from trading_journal.schemas.analytics import (
     AnalyticsParams,
@@ -15,7 +16,7 @@ from trading_journal.schemas.analytics import (
     WeekCountRead,
 )
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(prefix="/analytics", tags=["analytics"], responses=UNAUTHORIZED)
 
 Params = Annotated[AnalyticsParams, Query()]
 

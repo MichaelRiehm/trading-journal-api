@@ -14,7 +14,8 @@ Layered: **router → service → repository**.
 - **Repositories**: all SQLAlchemy queries. No business rules.
 - Pydantic schemas (Create / Update / Read per resource) are separate from ORM models.
 - Analytics math lives in pure functions with unit tests that don't need a database.
-- Protected routes take `user: CurrentUser` (`api/deps.py`) and pass `user.id` into scoped repository queries. Services raise errors from `domain/errors.py`; `api/errors.py` maps them to HTTP status codes.
+- Protected routes take `user: CurrentUser` (`api/deps.py`) and pass `user.id` into scoped repository queries. Services raise errors from `domain/errors.py`; `api/errors.py` maps them to RFC 9457 problem responses (ADR 0013). Document a route's errors with `responses=problem(status, "...")`; protected routers set `responses=UNAUTHORIZED`.
+- `api/middleware.py` assigns the request id, writes the JSON access log and turns unhandled exceptions into a 500 problem; `logging_config.py` holds the JSON formatter and the request context (ADR 0014). Never log headers, bodies, query strings or SQL parameters.
 - Trade rules live in `domain/`: `lifecycle.py` (transition table), `calculations.py` (Decimal math, reused by analytics), `trade_rules.py` (plan validation), `journal_rules.py` (which phases a trade's status allows), `analytics.py` (pure metric functions over `ClosedTrade` values; definitions in ADR 0011), `iso_week.py` (ISO week parsing, UTC). Request models extend `schemas/base.RequestModel` (unknown fields → 422); response decimals use `schemas/base.DecimalOut` (fixed-point strings, never `0E-8`).
 - API tests use the `api_client` fixture (requests share the test's rolled-back session) and the helpers in `tests/api_helpers.py`.
 

@@ -239,3 +239,49 @@ _Drafted by Claude. Not yet reviewed by Michael._
 ### Interview talking point
 
 "Before writing any analytics, I wrote down what each metric means. A breakeven trade is its own bucket but stays in the win-rate denominator, so the rates add to 100% and expectancy is exactly the mean P/L, an identity a unit test checks. Drawdown is per trade from a starting peak of 0, on the same points the equity-curve endpoint returns, so the two can't disagree. And an average of nothing is null, not 0, because 'you lost every trade' and 'you have no trades' are different answers."
+
+## 2026-10-27 — Stage 6: Hardening
+
+_Drafted by Claude. Not yet reviewed by Michael._
+
+### What I built
+
+- **One error format, RFC 9457 problem details,** for every error: domain errors, validation, unknown routes, wrong methods, and unhandled exceptions ([ADR 0013](decisions/0013-error-responses-and-pagination.md)).
+  - OpenAPI documents a `Problem` schema on every error response, and a test checks the whole document.
+  - The pagination conventions are written down.
+- **Structured JSON logging** with request ids ([ADR 0014](decisions/0014-structured-logging.md)):
+  - one access line per request
+  - unhandled errors logged once, with a traceback
+  - a test proving no password, hash or token reaches the logs
+- **The final Docker image** on the official `python:3.15.0-slim-trixie` ([ADR 0015](decisions/0015-runtime-image.md)):
+  - **Size:** 412 → 290 MB.
+  - **Runtime:** non-root, with a `HEALTHCHECK`.
+  - **CI:** a new `image` job checks the user and a size budget.
+- **A complete README.**
+- **The PyYAML recheck:** still no cp315 wheels, so pre-commit stays on 3.14.
+- **Tests:** 334, about 26 seconds. No new dependencies.
+
+### What I learned
+
+- **Validation errors can leak secrets.** FastAPI's default 422 includes the rejected `input`, so a too-short password came straight back in the response body. The fix keeps only `loc`, `msg` and `type`.
+- **ContextVars are copied into worker threads, and changes don't come back.**
+  - FastAPI runs a sync dependency in a thread pool with a *copy* of the context, so setting the user id there was invisible to the middleware afterwards.
+  - Storing a small mutable object in the ContextVar, and changing that object, works.
+  - It's the same trap as .NET's `AsyncLocal<T>`: values flow down into child work, not back up.
+- **SQLAlchemy quotes SQL parameters in error messages by default.** One `hide_parameters=True` keeps emails and hashes out of any log of a database error.
+- **A plain ASGI middleware is about 50 lines,** and it avoids `BaseHTTPMiddleware`'s extra wrapping. It's also the only place that can turn *any* exception into a well-formed 500 that still carries the request id.
+
+### What surprised me
+
+- **`logging.config.dictConfig` removes pytest's capture handler.** The app reconfigures logging when it's created, so the log tests attach their own JSON-formatting handler *after* building the app. That captures the lines as the server writes them, request id included.
+- **The official slim image was bigger than I estimated** (I'd guessed about 210 MB; it's 290). The saving came from dropping uv's 140 MB standalone CPython; the base itself is larger than I'd assumed. I recorded the real numbers in the ADR rather than the estimate.
+- **Docker Desktop's `docker images` size** is larger than `docker image inspect`'s (412 vs 392 MB for the same image). The CI budget uses `inspect`, the stable one.
+
+### Bugs I hit and how I fixed them
+
+- **Ownership tests compared whole error bodies,** which now include the path and a per-request id. They now compare the body minus `instance` and `request_id`. The point of the test, that "not yours" looks like "missing", is unchanged.
+- **Typed exception handlers didn't fit `add_exception_handler`'s signature.** It expects `(Request, Exception)`, so a handler for `RequestValidationError` fails mypy. FastAPI's decorator form, `app.exception_handler(...)`, accepts the specific type, so no `assert isinstance` is needed.
+
+### Interview talking point
+
+"Every error the API can produce, including the unexpected 500, is an RFC 9457 problem with a request id. The same id is in the response header and in the JSON log line, so a user's bug report leads straight to the traceback. And I tested what must *not* happen: a validation error never echoes the submitted password, the logs never contain a password, hash or token, and the OpenAPI document is checked to describe every error response."

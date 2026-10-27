@@ -20,6 +20,13 @@ from api_helpers import (
     registered_headers,
 )
 
+
+def comparable(response: Any) -> dict[str, Any]:
+    """The error body minus what differs per request anyway: the path and the request id."""
+    body: dict[str, Any] = response.json()
+    return {k: v for k, v in body.items() if k not in {"instance", "request_id"}}
+
+
 ENDPOINTS: list[tuple[str, str, str, dict[str, Any] | None]] = [
     # (resource, method, path suffix, body)
     ("strategies", "GET", "", None),
@@ -63,9 +70,9 @@ def test_other_users_row_looks_exactly_like_a_missing_one(
     missing = call(str(uuid.uuid7()))
 
     assert someone_elses.status_code == 404
-    assert (someone_elses.status_code, someone_elses.json()) == (
+    assert (someone_elses.status_code, comparable(someone_elses)) == (
         missing.status_code,
-        missing.json(),
+        comparable(missing),
     )
     # And nothing happened to the owner's row.
     after = api_client.get(f"/{resource}/{row['id']}", headers=owner)
@@ -106,9 +113,9 @@ def test_other_users_journal_looks_exactly_like_a_missing_one(
     missing = call(str(uuid.uuid7()), str(uuid.uuid7()))
 
     assert someone_elses.status_code == 404
-    assert (someone_elses.status_code, someone_elses.json()) == (
+    assert (someone_elses.status_code, comparable(someone_elses)) == (
         missing.status_code,
-        missing.json(),
+        comparable(missing),
     )
     assert api_client.get(journal_url, headers=owner).json() == before
 

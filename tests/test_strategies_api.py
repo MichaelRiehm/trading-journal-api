@@ -40,7 +40,7 @@ def test_duplicate_name_is_a_conflict(api_client: TestClient) -> None:
     response = api_client.post("/strategies", json={"name": "Breakout"}, headers=headers)
 
     assert response.status_code == 409
-    assert response.json() == {"detail": "You already have a strategy with this name"}
+    assert response.json()["detail"] == "You already have a strategy with this name"
 
 
 def test_same_name_is_fine_for_another_user(api_client: TestClient) -> None:
@@ -126,4 +126,4 @@ def test_strategy_with_trades_cannot_be_deleted(api_client: TestClient) -> None:
     response = api_client.delete(f"/strategies/{strategy['id']}", headers=headers)
 
     assert response.status_code == 409
-    assert response.json() == {"detail": "Strategy has trades. Reassign or delete them first"}
+    assert response.json()["detail"] == "Strategy has trades. Reassign or delete them first"

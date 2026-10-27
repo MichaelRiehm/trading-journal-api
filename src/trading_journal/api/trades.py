@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 
 from trading_journal.api.deps import CurrentUser, TradeServiceDep
-from trading_journal.api.errors import Responses
+from trading_journal.api.errors import UNAUTHORIZED, problem
 from trading_journal.schemas.pagination import Page
 from trading_journal.schemas.trade import (
     TradeClose,
@@ -15,18 +15,16 @@ from trading_journal.schemas.trade import (
     TradeUpdate,
 )
 
-router = APIRouter(prefix="/trades", tags=["trades"])
+router = APIRouter(prefix="/trades", tags=["trades"], responses=UNAUTHORIZED)
 
-_NOT_FOUND: Responses = {status.HTTP_404_NOT_FOUND: {"description": "Trade not found"}}
-_ILLEGAL: Responses = {
-    status.HTTP_409_CONFLICT: {"description": "Not allowed in the trade's current status"}
-}
+_NOT_FOUND = problem(status.HTTP_404_NOT_FOUND, "Trade not found")
+_ILLEGAL = problem(status.HTTP_409_CONFLICT, "Not allowed in the trade's current status")
 
 
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
-    responses={status.HTTP_409_CONFLICT: {"description": "Duplicate external_id for this source"}},
+    responses=problem(status.HTTP_409_CONFLICT, "Duplicate external_id for this source"),
 )
 def create_trade(body: TradeCreate, user: CurrentUser, trades: TradeServiceDep) -> TradeRead:
     """Plan a trade. Every trade starts as `planned`."""

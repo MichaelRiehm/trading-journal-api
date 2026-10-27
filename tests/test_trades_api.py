@@ -130,7 +130,7 @@ def test_business_rule_violations(
     response = api_client.post("/trades", json=plan_payload(**overrides), headers=headers)
 
     assert response.status_code == 422
-    assert response.json() == {"detail": detail}
+    assert response.json()["detail"] == detail
 
 
 @pytest.mark.parametrize(
@@ -164,7 +164,7 @@ def test_strategy_must_be_mine(api_client: TestClient) -> None:
     )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "strategy_id does not match any of your strategies"}
+    assert response.json()["detail"] == "strategy_id does not match any of your strategies"
 
 
 def test_duplicate_external_id_is_a_conflict(api_client: TestClient) -> None:

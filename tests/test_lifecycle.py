@@ -115,7 +115,7 @@ def test_open_validation(
 
     assert response.status_code == 422
     if message:
-        assert response.json() == {"detail": message}
+        assert response.json()["detail"] == message
 
 
 def test_exit_before_entry_is_rejected(api_client: TestClient) -> None:
@@ -129,7 +129,7 @@ def test_exit_before_entry_is_rejected(api_client: TestClient) -> None:
     )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "exit_at cannot be before entry_at"}
+    assert response.json()["detail"] == "exit_at cannot be before entry_at"
 
 
 def test_close_requires_followed_plan(api_client: TestClient) -> None:

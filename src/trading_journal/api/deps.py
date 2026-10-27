@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from trading_journal.config import Settings, get_settings
 from trading_journal.db.session import get_session
+from trading_journal.logging_config import request_context
 from trading_journal.models import User
 from trading_journal.services import (
     AnalyticsService,
@@ -34,7 +35,10 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
 def get_current_user(token: Annotated[str | None, Depends(_bearer)], auth: AuthServiceDep) -> User:
-    return auth.user_from_token(token or "")
+    user = auth.user_from_token(token or "")
+    if (ctx := request_context.get()) is not None:
+        ctx.user_id = str(user.id)  # the rest of this request's log lines carry it
+    return user
 
 
 # Every protected route takes `user: CurrentUser`. Queries are then scoped by user.id,
