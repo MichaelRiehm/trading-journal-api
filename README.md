@@ -2,7 +2,19 @@
 
 A REST API where a swing trader plans trades before entering, logs the result, journals thoughts before, during and after each trade, and gets analytics plus a weekly review of habits.
 
-**Status:** Stage 1 (data layer). The schema, migrations and repositories are in place; the only endpoints so far are `GET /health` and `GET /ready`. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
+**Status:** Stage 2 (auth). The schema, migrations and repositories are in place, along with register, login and the current user. Trades and strategies come in Stage 3. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
+
+## Endpoints so far
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/health` | none | Liveness |
+| GET | `/ready` | none | Readiness (checks the database) |
+| POST | `/auth/register` | none | Create an account (JSON: `email`, `password`, 12–128 characters) |
+| POST | `/auth/token` | none | OAuth2 password flow (form: `username` = email, `password`); returns a bearer token |
+| GET | `/users/me` | bearer | The current user |
+
+In `/docs`, register, then click **Authorize** and log in with your email as the username.
 
 ## Stack
 
@@ -14,7 +26,7 @@ Prerequisites: [uv](https://docs.astral.sh/uv/), Docker, GNU make.
 
 ```sh
 uv sync                        # install Python deps into .venv from uv.lock
-cp .env.example .env           # local settings (gitignored)
+cp .env.example .env           # local settings (gitignored); then set JWT_SECRET_KEY (see the file)
 make up                        # Postgres 18 + the API, waits until healthy
 curl http://localhost:8000/health
 make down
@@ -45,5 +57,7 @@ Layered: router → service → repository. Details in [CLAUDE.md](CLAUDE.md) an
 - [0002: Synchronous database access](docs/decisions/0002-sync-database-access.md)
 - [0003: Test database strategy](docs/decisions/0003-test-database-strategy.md)
 - [0004: Schema conventions](docs/decisions/0004-schema-conventions.md)
+- [0005: Access tokens](docs/decisions/0005-access-tokens.md)
+- [0006: Password handling](docs/decisions/0006-password-handling.md)
 
 Learning log: [docs/learning-log.md](docs/learning-log.md) · Interview prep: [docs/interview-prep.md](docs/interview-prep.md)

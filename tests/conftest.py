@@ -6,6 +6,7 @@ dropped at the end. Each test runs inside a transaction that is rolled back, so
 tests never see each other's data and need no cleanup.
 """
 
+import os
 import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -13,16 +14,22 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import URL, Engine, create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from trading_journal.config import get_settings
+from trading_journal.config import get_database_settings
+from trading_journal.db.session import get_session
 from trading_journal.main import create_app
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 _SAFE_DB_NAME = re.compile(r"^[a-z0-9_]+$")
+
+# Tests sign tokens with a throwaway key, so neither CI nor a fresh checkout needs one.
+# Settings are read lazily, so setting this before the first test is early enough.
+os.environ.setdefault("JWT_SECRET_KEY", "test-only-signing-key-not-a-real-secret-0123456789")
 
 
 @pytest.fixture
@@ -32,7 +39,7 @@ def client() -> Iterator[TestClient]:
 
 
 def _test_database_url() -> URL:
-    settings = get_settings()
+    settings = get_database_settings()
     if settings.test_database_url:
         return make_url(settings.test_database_url)
     url = make_url(settings.database_url)
@@ -107,6 +114,24 @@ def session(engine: Engine) -> Iterator[Session]:
         finally:
             db_session.close()
             outer.rollback()
+
+
+@pytest.fixture
+def app(session: Session) -> FastAPI:
+    """The app with every request using the test's rolled-back session."""
+    test_app = create_app()
+
+    def session_override() -> Iterator[Session]:
+        yield session
+
+    test_app.dependency_overrides[get_session] = session_override
+    return test_app
+
+
+@pytest.fixture
+def api_client(app: FastAPI) -> Iterator[TestClient]:
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture

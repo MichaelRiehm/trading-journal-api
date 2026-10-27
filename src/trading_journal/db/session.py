@@ -7,13 +7,13 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from trading_journal.config import get_settings
+from trading_journal.config import get_database_settings
 
 
 @lru_cache
 def get_engine() -> Engine:
     return create_engine(
-        get_settings().database_url,
+        get_database_settings().database_url,
         pool_pre_ping=True,
         connect_args={"connect_timeout": 5},
     )

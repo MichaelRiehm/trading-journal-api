@@ -75,3 +75,41 @@ Decisions: [ADR 0002](decisions/0002-sync-database-access.md) (sync over async),
 ### Interview talking point
 
 "I treat the database as the last line of defence. The service validates for good error messages, but CHECK constraints and a composite foreign key make illegal trades unstorable. For example, a trade can't reference another user's strategy, even if a bug skips the service check. Every constraint has a test, because Alembic doesn't detect CHECK changes."
+
+## 2026-10-26 — Stage 2: Auth
+
+_Drafted by Claude. Not yet reviewed by Michael._
+
+### What I built
+
+- `POST /auth/register`, `POST /auth/token` (OAuth2 password flow) and `GET /users/me`.
+- **Passwords:** Argon2id via pwdlib, with timing-equalized login and rehash-on-login.
+- **Tokens:** HS256 JWTs with `sub`/`iat`/`exp`/`iss`/`aud`, decoded with a pinned algorithm.
+- **`CurrentUser`:** a dependency that every protected route takes.
+- **Domain errors** (`NotFoundError`, `ConflictError`, `AuthenticationError`), mapped to 404, 409 and 401 in one place.
+- **A test that proves the 404-not-403 pattern:** another user's strategy and a missing one give identical responses.
+- 67 tests, about 4 seconds.
+
+Decisions: [ADR 0005](decisions/0005-access-tokens.md) (access tokens) and [ADR 0006](decisions/0006-password-handling.md) (password handling).
+
+### What I learned
+
+- **FastAPI's `Depends` is DI without a container.** A function's parameters declare what it needs, and FastAPI builds the graph per request: `get_current_user` → `AuthService` → `Session` + `Settings`. `Annotated[User, Depends(...)]` gives that a reusable name, `CurrentUser`, which acts like `[Authorize]` and `HttpContext.User` combined.
+- **A JWT is signed, not encrypted.** The security comes from verifying it strictly: a pinned algorithm, required claims, issuer and audience checks, and loading the user.
+- **Good auth means the error paths look identical.** Same 401 for every bad token. Same 401 and the same timing for an unknown email and a wrong password. Same 404 for "not yours" and "doesn't exist".
+- **pydantic-settings composes** like ordinary classes. `Settings(DatabaseSettings)` let the migrate container run without ever seeing the signing key.
+
+### What surprised me
+
+- **Pydantic's validation errors echo the rejected input by default,** so a too-short `JWT_SECRET_KEY` (or a bad `DATABASE_URL` with a password in it) would be printed into the startup logs. `hide_input_in_errors=True` fixes it, and a test now checks it.
+- **PyJWT warns when an HMAC key is shorter than the hash output** (64 bytes for HS512). That's how I noticed a test was relying on the wrong reason for a rejection.
+- **ruff's S105 rule flags any string assigned to a name containing "token"** as a possible hardcoded password, including `token_type = "bearer"`. Those three are suppressed inline, each with a reason.
+
+### Bugs I hit and how I fixed them
+
+- **A commit message got a UTF-8 BOM** (`﻿chore: ...`). PowerShell 5.1's `Set-Content -Encoding utf8` writes one. Commit message files are now written with a BOM-free writer. The affected commit is on the branch only, and the squash merge replaces it.
+- **The startup failure leaked the key into the logs.** Found while verifying the fail-fast behaviour, and fixed as described above.
+
+### Interview talking point
+
+"For another user's data the API returns 404, not 403, and that's structural, not a check someone could forget. Every repository query is scoped by the current user's id, so 'not yours' and 'doesn't exist' are the same code path. A test asserts the two responses are byte-for-byte identical. The same principle runs through login: an unknown email still pays for an Argon2 verify against a dummy hash, so response time doesn't reveal who has an account."
