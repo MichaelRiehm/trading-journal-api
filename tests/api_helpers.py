@@ -82,6 +82,34 @@ def create_trade(
     return trade
 
 
+def create_closed_trade(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    exit_price: str,
+    exit_at: str,
+    fees: str = "0",
+    followed_plan: bool = True,
+    entry_at: str = OPEN_BODY["entry_at"],
+    **overrides: Any,
+) -> Any:
+    """A trade opened at 100 x 10 (1R = $50 with the default plan) and closed as given."""
+    trade = create_trade(client, headers, **overrides)
+    response = client.post(
+        f"/trades/{trade['id']}/open", json={**OPEN_BODY, "entry_at": entry_at}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    close = {
+        "exit_price": exit_price,
+        "exit_at": exit_at,
+        "fees": fees,
+        "followed_plan": followed_plan,
+    }
+    response = client.post(f"/trades/{trade['id']}/close", json=close, headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def create_entry(
     client: TestClient,
     headers: dict[str, str],

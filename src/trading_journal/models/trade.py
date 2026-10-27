@@ -27,9 +27,10 @@ _EXIT = (
     " AND followed_plan IS NOT NULL"
 )
 _STATUS_FIELDS = (
-    f"(status IN ('planned', 'cancelled') AND {_NO_ENTRY} AND {_NO_EXIT})"
-    f" OR (status = 'open' AND {_ENTRY} AND {_NO_EXIT})"
-    f" OR (status = 'closed' AND {_ENTRY} AND {_EXIT})"
+    f"(status = 'planned' AND {_NO_ENTRY} AND {_NO_EXIT} AND cancelled_at IS NULL)"
+    f" OR (status = 'cancelled' AND {_NO_ENTRY} AND {_NO_EXIT} AND cancelled_at IS NOT NULL)"
+    f" OR (status = 'open' AND {_ENTRY} AND {_NO_EXIT} AND cancelled_at IS NULL)"
+    f" OR (status = 'closed' AND {_ENTRY} AND {_EXIT} AND cancelled_at IS NULL)"
 )
 
 
@@ -71,6 +72,7 @@ class Trade(UUIDPrimaryKey, Timestamps, Base):
         CheckConstraint(_STATUS_FIELDS, name="status_fields"),
         Index("ix_trades_user_id_status", "user_id", "status"),
         Index("ix_trades_user_id_exit_at", "user_id", "exit_at"),
+        Index("ix_trades_user_id_cancelled_at", "user_id", "cancelled_at"),
         Index("ix_trades_strategy_id", "strategy_id"),
     )
     __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
@@ -104,6 +106,9 @@ class Trade(UUIDPrimaryKey, Timestamps, Base):
     exit_at: Mapped[datetime | None]
     fees: Mapped[Decimal | None]
     followed_plan: Mapped[bool | None]
+
+    # Set when the trade is cancelled, so the weekly review can place it in a week (ADR 0012).
+    cancelled_at: Mapped[datetime | None]
 
     source: Mapped[TradeSource] = mapped_column(
         str_enum(TradeSource, "source"),

@@ -2,7 +2,7 @@
 
 A REST API where a swing trader plans trades before entering, logs the result, journals thoughts before, during and after each trade, and gets analytics plus a weekly review of habits.
 
-**Status:** Stage 4 (journal entries). You can register, plan trades, open and close them, see P/L and R-multiples, and journal before, during and after each trade. Analytics and the weekly review come in Stage 5. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
+**Status:** Stage 5 (analytics and weekly review). You can register, plan trades, open and close them, journal before, during and after each trade, and get analytics plus a weekly review. Stage 6 is hardening. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
 
 ## Endpoints so far
 
@@ -23,6 +23,13 @@ A REST API where a swing trader plans trades before entering, logs the result, j
 | POST | `/trades/{id}/cancel` | bearer | planned → cancelled |
 | POST, GET | `/trades/{id}/journal` | bearer | Add a journal entry (`phase` defaults to the trade's stage, and can't run ahead of it); list them oldest first (`?phase=` filter) |
 | PATCH, DELETE | `/journal/{entry_id}` | bearer | Edit or delete an entry |
+| GET | `/analytics/summary` | bearer | Win rate, expectancy ($ and R), P/L, fees, hold times, plan adherence, max drawdown. Filters: `start_date`, `end_date` (by close date, UTC), `strategy_id`, `symbol`, `side`, `asset_type`, `source` |
+| GET | `/analytics/equity-curve` | bearer | Cumulative P/L after each closed trade (same filters) |
+| GET | `/analytics/breakdown?by=` | bearer | The summary per `strategy`, `symbol`, `side`, `asset_type` or `exposure` (same filters) |
+| GET | `/analytics/frequency` | bearer | Trades opened per ISO week, empty weeks included (same filters, dates by entry) |
+| GET | `/reviews/weekly?week=2026-W42` | bearer | That week's closed and cancelled trades, summary, and journal grouped by phase (defaults to this week) |
+
+Analytics count closed trades only. A breakeven (net P/L of exactly 0) is neither a win nor a loss but counts in every rate; the definitions are in [ADR 0011](docs/decisions/0011-analytics-definitions.md).
 
 Money values are JSON strings (`"98.00000000"`), so they never pass through a float. Another user's ids return 404, and illegal lifecycle moves return 409.
 
@@ -75,5 +82,7 @@ Layered: router → service → repository. Details in [CLAUDE.md](CLAUDE.md) an
 - [0008: Trade lifecycle and derived values](docs/decisions/0008-trade-lifecycle-and-derived-values.md)
 - [0009: Keyset pagination](docs/decisions/0009-keyset-pagination.md)
 - [0010: Journal phases can't run ahead of the trade](docs/decisions/0010-journal-phase-rules.md)
+- [0011: Analytics definitions](docs/decisions/0011-analytics-definitions.md)
+- [0012: The weekly review, and recording when a trade was cancelled](docs/decisions/0012-weekly-review-and-cancelled-at.md)
 
 Learning log: [docs/learning-log.md](docs/learning-log.md) · Interview prep: [docs/interview-prep.md](docs/interview-prep.md)

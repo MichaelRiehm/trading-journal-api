@@ -33,6 +33,9 @@ OPENED: dict[str, Any] = {
         ({**OPENED, "quantity": Decimal("0")}, "quantity_positive"),
         ({"status": TradeStatus.OPEN}, "status_fields"),  # open without entry fields
         ({"entry_price": Decimal("100")}, "status_fields"),  # planned with an entry
+        ({"status": TradeStatus.CANCELLED}, "status_fields"),  # cancelled without cancelled_at
+        ({"cancelled_at": datetime(2026, 10, 2, tzinfo=UTC)}, "status_fields"),  # planned with it
+        ({**OPENED, "cancelled_at": datetime(2026, 10, 2, tzinfo=UTC)}, "status_fields"),
         (
             {
                 **OPENED,

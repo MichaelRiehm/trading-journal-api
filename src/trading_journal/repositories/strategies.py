@@ -27,6 +27,12 @@ class StrategyRepository:
             select(Strategy).where(Strategy.user_id == user_id).order_by(Strategy.name)
         ).all()
 
+    def names(self, user_id: uuid.UUID) -> dict[uuid.UUID, str]:
+        rows = self._session.execute(
+            select(Strategy.id, Strategy.name).where(Strategy.user_id == user_id)
+        )
+        return dict(rows.all())
+
     def get_by_name(self, user_id: uuid.UUID, name: str) -> Strategy | None:
         return self._session.scalar(
             select(Strategy).where(Strategy.user_id == user_id, Strategy.name == name)
