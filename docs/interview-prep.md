@@ -370,3 +370,31 @@ What to be able to explain about this project, collected stage by stage while it
   - The production session doesn't expire objects on commit, so the response was built from the client's input. The test session *did* expire them, so tests always re-read from the database and never saw it.
   - The fix had two parts: normalize inputs to the stored form, and make the test session match production.
   - **Lesson:** test fixtures that differ from production config hide bugs.
+
+---
+
+## Stage 4: Journal entries
+
+- [ ] **Should a journal entry's phase match the trade's status?**
+  - Not exactly. **A phase can't run ahead of the trade** (no `post` before close, no `during` on a trade that never opened), but earlier phases can be backfilled.
+  - A strict match would block the real "log it afterwards" workflow; no rule would let nonsense into the weekly review.
+  - A violation returns 409, and the phase defaults to the trade's current stage.
+
+  → [ADR 0010](decisions/0010-journal-phase-rules.md)
+- [ ] **Trade transitions lock the row. Why don't journal writes?**
+  - The lock exists to stop a check from being invalidated by a concurrent change. Here that can't happen: statuses only move forward, and each status allows a superset of the previous one's phases.
+  - A valid entry stays valid whatever transition commits next. A unit test asserts that property, so a future rule change that breaks it fails the build.
+  - The general skill: **reason from invariants about when you *don't* need a lock**, instead of adding locks everywhere.
+- [ ] **How is ownership enforced for a row with no `user_id` column?**
+  - Through its parent. `SELECT … FROM journal_entries JOIN trades ON … WHERE entry.id = :id AND trades.user_id = :me`.
+  - Another user's entry simply isn't found, giving a 404 identical to a missing one. A parametrized test covers all four journal endpoints.
+  - Storing `user_id` on entries would duplicate data that could disagree with the trade.
+- [ ] **Nested or flat URLs: `/trades/{id}/journal` or `/journal/{id}`?**
+  - Both, for different jobs. **Nested for collection operations** (create and list), where the parent is the context.
+  - **Flat for the item** (PATCH and DELETE): the entry id is enough, and the client doesn't need to know the trade.
+  - That's a common REST convention. GitHub's REST API does the same with issue comments: `POST /repos/{owner}/{repo}/issues/{number}/comments` to create, `PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}` to edit.
+- [ ] **Why can journal entries be edited after the fact when the trade plan can't?**
+  - The plan is structured data that analytics (plan adherence) measures against, so editing it would falsify numbers.
+  - The journal is free text no number depends on. Transparency (`updated_at` in every response) is enough, and Stage 5 can flag edited entries.
+- [ ] **Why can't a test see `updated_at` change?**
+  Postgres's `now()` returns the **transaction start time**, constant for the whole transaction, and each test is one rolled-back transaction. Production requests are separate transactions, so it does advance, which I verified against the running stack. `clock_timestamp()` gives wall-clock time within a transaction, if that's ever needed.

@@ -158,3 +158,34 @@ Decisions: [ADR 0007](decisions/0007-short-vs-inverse-etf.md) (short vs inverse 
 ### Interview talking point
 
 "The trade lifecycle is enforced at three layers: a transition table in pure Python that turns illegal moves into 409s; `SELECT … FOR UPDATE` so two concurrent closes can't both succeed; and a CHECK constraint that makes an inconsistent row unstorable. The test suite derives every status-and-action combination from the same table, so the tests can't drift from the rules."
+
+## 2026-10-27 — Stage 4: Journal entries
+
+_Drafted by Claude. Not yet reviewed by Michael._
+
+### What I built
+
+- **Endpoints:** `POST/GET /trades/{id}/journal` and `PATCH/DELETE /journal/{entry_id}`.
+- **The phase rule** ([ADR 0010](decisions/0010-journal-phase-rules.md)):
+  - A phase can't run ahead of the trade; a violation returns 409. Backfilling an earlier phase is allowed.
+  - The phase defaults to wherever the trade is now.
+- **Ownership:** it follows the trade through a join, so another user's trade or entry returns 404.
+- 225 tests, about 16 seconds. No schema change and no new dependencies.
+
+### What I learned
+
+- **Sometimes the right answer is *no* lock, and you can prove it.** Statuses only move forward, and each status allows a superset of the previous one's phases. So a check that passed can't be invalidated by a concurrent transition. That's a one-line property test over the lifecycle table, and it fails if a future change breaks the reasoning.
+- **Rules as data, again.** Like the lifecycle in Stage 3, the phase rule is a dictionary. The tests derive their matrix from it, and a unit test checks it against the lifecycle table.
+- **Nested routes for creating, flat routes for editing.** `/trades/{id}/journal` says which trade an entry belongs to. `/journal/{entry_id}` lets a client edit without knowing the trade.
+
+### What surprised me
+
+- **`updated_at` can't visibly change inside a test.** Postgres's `now()` is the *transaction's* start time, and each test runs in one rolled-back transaction. So "updated_at advances" is only provable against the real stack, where I checked it through compose. Inside the suite, the test asserts `updated_at >= created_at` and that the edit persisted.
+
+### Bugs I hit and how I fixed them
+
+- **None in the code this stage.** One near miss in my own process: I added a lint suppression to a line that didn't need it, and removed it on review.
+
+### Interview talking point
+
+"Trade transitions take a row lock, but journal writes deliberately don't, and I can show why. The allowed journal phases only grow as a trade moves through its lifecycle, so any entry that passed the check stays valid whatever transition commits next. That invariant is a unit test over the same lifecycle table the code uses. If someone changes the rules in a way that breaks it, the test tells them the locking question is back."

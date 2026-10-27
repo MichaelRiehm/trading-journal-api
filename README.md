@@ -2,7 +2,7 @@
 
 A REST API where a swing trader plans trades before entering, logs the result, journals thoughts before, during and after each trade, and gets analytics plus a weekly review of habits.
 
-**Status:** Stage 3 (strategies, trades and the lifecycle). You can register, plan trades, open and close them, and see P/L and R-multiples. Journal entries come in Stage 4, and analytics in Stage 5. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
+**Status:** Stage 4 (journal entries). You can register, plan trades, open and close them, see P/L and R-multiples, and journal before, during and after each trade. Analytics and the weekly review come in Stage 5. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the full scope and stage plan.
 
 ## Endpoints so far
 
@@ -21,6 +21,8 @@ A REST API where a swing trader plans trades before entering, logs the result, j
 | POST | `/trades/{id}/open` | bearer | planned → open: record the entry |
 | POST | `/trades/{id}/close` | bearer | open → closed: record the exit; the response includes P/L, R-multiple and hold time |
 | POST | `/trades/{id}/cancel` | bearer | planned → cancelled |
+| POST, GET | `/trades/{id}/journal` | bearer | Add a journal entry (`phase` defaults to the trade's stage, and can't run ahead of it); list them oldest first (`?phase=` filter) |
+| PATCH, DELETE | `/journal/{entry_id}` | bearer | Edit or delete an entry |
 
 Money values are JSON strings (`"98.00000000"`), so they never pass through a float. Another user's ids return 404, and illegal lifecycle moves return 409.
 
@@ -72,5 +74,6 @@ Layered: router → service → repository. Details in [CLAUDE.md](CLAUDE.md) an
 - [0007: Short positions vs inverse ETFs](docs/decisions/0007-short-vs-inverse-etf.md)
 - [0008: Trade lifecycle and derived values](docs/decisions/0008-trade-lifecycle-and-derived-values.md)
 - [0009: Keyset pagination](docs/decisions/0009-keyset-pagination.md)
+- [0010: Journal phases can't run ahead of the trade](docs/decisions/0010-journal-phase-rules.md)
 
 Learning log: [docs/learning-log.md](docs/learning-log.md) · Interview prep: [docs/interview-prep.md](docs/interview-prep.md)
