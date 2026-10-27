@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from trading_journal.api.deps import CurrentUser, ReviewServiceDep
+from trading_journal.api.errors import UNAUTHORIZED
 from trading_journal.domain.enums import JournalPhase
 from trading_journal.domain.iso_week import week_label
 from trading_journal.models import JournalEntry, Trade
@@ -19,7 +20,7 @@ from trading_journal.schemas.review import (
 )
 from trading_journal.schemas.trade import TradeRead
 
-router = APIRouter(prefix="/reviews", tags=["reviews"])
+router = APIRouter(prefix="/reviews", tags=["reviews"], responses=UNAUTHORIZED)
 
 
 @router.get("/weekly")

@@ -16,6 +16,8 @@ def get_engine() -> Engine:
         get_database_settings().database_url,
         pool_pre_ping=True,
         connect_args={"connect_timeout": 5},
+        # Keep bound values (emails, password hashes) out of exception messages and logs.
+        hide_parameters=True,
     )
 
 

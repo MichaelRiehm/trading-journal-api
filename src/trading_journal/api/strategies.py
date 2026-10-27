@@ -3,15 +3,13 @@ import uuid
 from fastapi import APIRouter, status
 
 from trading_journal.api.deps import CurrentUser, StrategyServiceDep
-from trading_journal.api.errors import Responses
+from trading_journal.api.errors import UNAUTHORIZED, problem
 from trading_journal.schemas.strategy import StrategyCreate, StrategyRead, StrategyUpdate
 
-router = APIRouter(prefix="/strategies", tags=["strategies"])
+router = APIRouter(prefix="/strategies", tags=["strategies"], responses=UNAUTHORIZED)
 
-_NOT_FOUND: Responses = {status.HTTP_404_NOT_FOUND: {"description": "Strategy not found"}}
-_CONFLICT: Responses = {
-    status.HTTP_409_CONFLICT: {"description": "Duplicate name, or the strategy has trades"}
-}
+_NOT_FOUND = problem(status.HTTP_404_NOT_FOUND, "Strategy not found")
+_CONFLICT = problem(status.HTTP_409_CONFLICT, "Duplicate name, or the strategy has trades")
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, responses=_CONFLICT)

@@ -9,7 +9,7 @@ import uuid
 from fastapi import APIRouter, status
 
 from trading_journal.api.deps import CurrentUser, JournalServiceDep
-from trading_journal.api.errors import Responses
+from trading_journal.api.errors import UNAUTHORIZED, problem
 from trading_journal.domain.enums import JournalPhase
 from trading_journal.schemas.journal import (
     JournalEntryCreate,
@@ -17,16 +17,14 @@ from trading_journal.schemas.journal import (
     JournalEntryUpdate,
 )
 
-trade_journal_router = APIRouter(prefix="/trades/{trade_id}/journal", tags=["journal"])
-entry_router = APIRouter(prefix="/journal", tags=["journal"])
+trade_journal_router = APIRouter(
+    prefix="/trades/{trade_id}/journal", tags=["journal"], responses=UNAUTHORIZED
+)
+entry_router = APIRouter(prefix="/journal", tags=["journal"], responses=UNAUTHORIZED)
 
-_TRADE_NOT_FOUND: Responses = {status.HTTP_404_NOT_FOUND: {"description": "Trade not found"}}
-_ENTRY_NOT_FOUND: Responses = {
-    status.HTTP_404_NOT_FOUND: {"description": "Journal entry not found"}
-}
-_PHASE_CONFLICT: Responses = {
-    status.HTTP_409_CONFLICT: {"description": "The phase runs ahead of the trade's status"}
-}
+_TRADE_NOT_FOUND = problem(status.HTTP_404_NOT_FOUND, "Trade not found")
+_ENTRY_NOT_FOUND = problem(status.HTTP_404_NOT_FOUND, "Journal entry not found")
+_PHASE_CONFLICT = problem(status.HTTP_409_CONFLICT, "The phase runs ahead of the trade's status")
 
 
 @trade_journal_router.post(
