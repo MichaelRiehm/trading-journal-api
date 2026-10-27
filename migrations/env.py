@@ -1,4 +1,4 @@
-"""Alembic environment: runs migrations against DATABASE_URL (from the app's Settings).
+"""Alembic environment: runs migrations against DATABASE_URL (from DatabaseSettings).
 
 Tests pass an open connection in `config.attributes["connection"]` instead, so they
 can migrate a throwaway test database.
@@ -10,7 +10,7 @@ from alembic import context
 from sqlalchemy import Connection, create_engine
 
 import trading_journal.models  # noqa: F401  # registers every table on Base.metadata
-from trading_journal.config import get_settings
+from trading_journal.config import get_database_settings
 from trading_journal.db.base import Base
 
 config = context.config
@@ -29,7 +29,7 @@ def run_migrations(connection: Connection) -> None:
 def run_migrations_offline() -> None:
     """Emit SQL to stdout (`alembic upgrade head --sql`) without connecting."""
     context.configure(
-        url=get_settings().database_url,
+        url=get_database_settings().database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -43,7 +43,9 @@ def run_migrations_online() -> None:
     if connection is not None:
         run_migrations(connection)
         return
-    engine = create_engine(get_settings().database_url, connect_args={"connect_timeout": 5})
+    engine = create_engine(
+        get_database_settings().database_url, connect_args={"connect_timeout": 5}
+    )
     with engine.connect() as conn:
         run_migrations(conn)
     engine.dispose()
