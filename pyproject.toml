@@ -7,12 +7,14 @@ authors = [{ name = "Michael Riehm", email = "riehm7070@gmail.com" }]
 requires-python = ">=3.15"
 dependencies = [
     "alembic>=1.20.0",
+    "email-validator>=2.3.0",
     "fastapi>=0.143.0",
     "psycopg[binary]>=3.3.6",
     "pwdlib[argon2]>=0.3.1",
     "pydantic>=2.14.1",
     "pydantic-settings>=2.15.0",
     "pyjwt>=2.15.1",
+    "python-multipart>=0.0.32",
     "sqlalchemy>=2.1,<2.2",
     "uvicorn>=0.54.0",
 ]
