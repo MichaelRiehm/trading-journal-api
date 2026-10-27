@@ -5,11 +5,12 @@ on ETFs, transitions) live in the service, so create and PATCH share them.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import (
+    AfterValidator,
     AwareDatetime,
     BaseModel,
     BeforeValidator,
@@ -36,10 +37,25 @@ Symbol = Annotated[
     BeforeValidator(_normalize_symbol),
     StringConstraints(pattern=r"^[A-Z0-9][A-Z0-9.\-/]{0,31}$"),
 ]
+
+
+def _to_column_scale(value: Decimal) -> Decimal:
+    # "100" becomes 100.00000000, exactly what NUMERIC(20, 8) stores and returns, so a
+    # response built from the request and one read back from the database look the same.
+    return value.quantize(calculations.MONEY_QUANTUM)
+
+
+def _to_utc(value: datetime) -> datetime:
+    # Same idea for timestamps: "+09:00" in, UTC out, like a later read from timestamptz.
+    return value.astimezone(UTC)
+
+
 # NUMERIC(20, 8): 12 integer digits and 8 decimals.
-Price = Annotated[Decimal, Field(gt=0, max_digits=20, decimal_places=8)]
-Quantity = Annotated[Decimal, Field(gt=0, max_digits=20, decimal_places=8)]
-Fees = Annotated[Decimal, Field(ge=0, max_digits=20, decimal_places=8)]
+_Numeric = Field(max_digits=20, decimal_places=8)
+Price = Annotated[Decimal, _Numeric, Field(gt=0), AfterValidator(_to_column_scale)]
+Quantity = Annotated[Decimal, _Numeric, Field(gt=0), AfterValidator(_to_column_scale)]
+Fees = Annotated[Decimal, _Numeric, Field(ge=0), AfterValidator(_to_column_scale)]
+UtcDatetime = Annotated[AwareDatetime, AfterValidator(_to_utc)]
 Leverage = Literal[2, 3, -2, -3]
 Thesis = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000)]
 ExternalId = Annotated[str, StringConstraints(min_length=1, max_length=128)]
@@ -103,12 +119,12 @@ class TradeUpdate(RequestModel):
 class TradeOpen(RequestModel):
     entry_price: Price
     quantity: Quantity
-    entry_at: AwareDatetime | None = None  # defaults to now
+    entry_at: UtcDatetime | None = None  # defaults to now
 
 
 class TradeClose(RequestModel):
     exit_price: Price
-    exit_at: AwareDatetime | None = None  # defaults to now
+    exit_at: UtcDatetime | None = None  # defaults to now
     fees: Fees = Decimal(0)
     followed_plan: bool
 

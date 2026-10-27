@@ -25,6 +25,25 @@ def test_create_returns_a_plan_with_derived_fields(api_client: TestClient) -> No
     assert trade["hold_time"] is None
 
 
+def test_create_response_matches_a_later_read(api_client: TestClient) -> None:
+    # The create response is built from the request's values, a GET from the database's.
+    # Inputs are normalized to the stored form, so the two agree exactly.
+    _, headers = registered_headers(api_client)
+
+    created = create_trade(api_client, headers, planned_entry="100", planned_stop="95.5")
+    opened = api_client.post(
+        f"/trades/{created['id']}/open",
+        json={"entry_price": "101", "quantity": "3", "entry_at": "2026-10-20T23:30:00+09:00"},
+        headers=headers,
+    ).json()
+    fetched = api_client.get(f"/trades/{created['id']}", headers=headers).json()
+
+    assert created["planned_entry"] == "100.00000000"
+    assert created["r_per_share"] == "4.50000000"
+    assert opened["entry_at"] == "2026-10-20T14:30:00Z"
+    assert fetched == opened
+
+
 def test_symbol_is_normalized(api_client: TestClient) -> None:
     _, headers = registered_headers(api_client)
 

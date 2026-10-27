@@ -108,7 +108,11 @@ def session(engine: Engine) -> Iterator[Session]:
     """
     with engine.connect() as conn:
         outer = conn.begin()
-        db_session = Session(bind=conn, join_transaction_mode="create_savepoint")
+        # expire_on_commit=False matches get_sessionmaker(), so responses built after a
+        # commit are the same here as in production.
+        db_session = Session(
+            bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
+        )
         try:
             yield db_session
         finally:
